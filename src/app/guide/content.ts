@@ -182,7 +182,7 @@ export const SECTIONS: readonly Section[] = [
         'The **chips** show or hide one exchange\'s contribution without stopping its feed. A chip that is dimmed is one the Spot / Perp filter is hiding: click it to show it. An exchange you chose that has no map gets a dashed chip that says why on hover.',
         'The **Heatmap** selector shows a single exchange\'s own map instead of the combined one.',
         'The **market** selector chooses whose candles, footprint and open interest the chart uses.',
-        '**Coin** switches to another coin on nine or more of these markets; the page reloads.',
+        '**Coin** is Bitcoin. The page does not switch coins.',
       ] },
       { t: 'p', text: 'Some exchanges refuse some countries. If one never connects while the others work, its chip becomes a dashed tag and a banner says it is **unavailable from your location**. A VPN set to another country may enable it; the rest keep working either way.' },
     ],

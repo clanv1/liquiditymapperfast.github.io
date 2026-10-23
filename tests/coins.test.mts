@@ -44,45 +44,43 @@ test('each market\'s list is read into coin, listing, price of one coin and volu
   assert.deepEqual(read('coinbase', { 'SOL-USD': { stats_24hour: { last: '100', volume: '2' } }, 'SOL-EUR': { stats_24hour: { last: '90', volume: '2' } } }), [{ coin: 'SOL', listing: { symbol: 'SOL-USD', unit: 1 }, price: 100, volumeUsd: 200 }]);
 });
 
-test('a coin on nine of the eleven markets is listed, on eight it is not; one already listed stays on eight', () => {
+test('another coin is never listed, however many markets name it', () => {
   const nine = buildCatalogue(lists({ AAA: { price: 2, off: ['deribit', 'coinbase'] }, BBB: { price: 3, off: ['deribit', 'coinbase', 'hyperliquid'] } }), null, NOW).catalogue;
   assert.equal(MIN_MARKETS, 9); assert.equal(KEEP_MARKETS, 8);
-  assert.ok(coinOf(nine, 'AAA')); assert.equal(coinOf(nine, 'BBB'), undefined);
-  const later = buildCatalogue(lists({ AAA: { price: 2, off: ['deribit', 'coinbase', 'okxspot'] } }), nine, NOW + 86_400_000).catalogue;
-  assert.ok(coinOf(later, 'AAA'), 'kept at eight');
-  assert.equal(Object.keys(coinOf(later, 'AAA')!.markets).length, 8);
+  assert.deepEqual(nine.coins.map(c => c.coin), ['BTC']);
+  const later = buildCatalogue(lists({ AAA: { price: 2 }, BBB: { price: 3 }, LIT: { price: 1, at: { binancespot: 0.21 } } }), nine, NOW + 86_400_000).catalogue;
+  assert.deepEqual(later.coins.map(c => c.coin), ['BTC']);
+  assert.deepEqual(later.coins[0]!.markets, BTC.markets);
 });
 
-test('a market whose price is another token\'s is left out of the coin, and the coin is judged on the rest', () => {
-  const c = buildCatalogue(lists({ LIT: { price: 1, at: { binancespot: 0.21 } } }), null, NOW).catalogue;
-  const lit = coinOf(c, 'LIT')!;
-  assert.equal(lit.markets.binancespot, undefined);
-  assert.equal(Object.keys(lit.markets).length, 10);
-});
-
-test('a market whose list fails keeps its listings from the previous list, and says how old they are', () => {
+test('a market whose list fails is named, and the catalogue stays BTC with the built-in markets', () => {
   const first = buildCatalogue(lists({ AAA: { price: 2 } }), null, NOW).catalogue;
   const fresh = lists({ AAA: { price: 2 } }) as Partial<Record<CoinVenue, ListRow[] | null>>;
   fresh.binance = null; fresh.bybit = null;
   const { catalogue, notes } = buildCatalogue(fresh, first, NOW + 86_400_000);
-  assert.deepEqual(coinOf(catalogue, 'AAA')!.markets.binance, coinOf(first, 'AAA')!.markets.binance);
-  assert.equal(catalogue.lists.binance, NOW, 'the listings are as old as the list they came from');
+  assert.deepEqual(catalogue.coins.map(c => c.coin), ['BTC']);
+  assert.deepEqual(catalogue.coins[0]!.markets, BTC.markets);
+  assert.equal(catalogue.lists.binance, NOW, 'the unread list keeps the time it was last read');
   assert.equal(catalogue.lists.okx, NOW + 86_400_000);
   assert.ok(notes.some(n => n.startsWith('binance: list not read')));
 });
 
-test('with too few lists, or a list that loses a third of its coins, the previous list stands', () => {
+test('with too few lists the previous catalogue stands, and it is still only BTC', () => {
   const first = buildCatalogue(lists({ AAA: { price: 2 }, BBB: { price: 3 }, CCC: { price: 4 } }), null, NOW).catalogue;
   const few = lists({ AAA: { price: 2 } }) as Partial<Record<CoinVenue, ListRow[] | null>>;
   for (const v of COIN_VENUES.slice(0, 6)) few[v] = null;
-  assert.equal(buildCatalogue(few, first, NOW + 1).catalogue, first);
+  const kept = buildCatalogue(few, first, NOW + 1);
+  assert.equal(kept.fresh, false);
+  assert.equal(kept.catalogue.builtAt, first.builtAt);
+  assert.deepEqual(kept.catalogue.coins.map(c => c.coin), ['BTC']);
   const none = buildCatalogue(few, null, NOW + 1);
   assert.equal(none.fresh, false, 'with nothing before it, too few lists is still no day\'s list');
   assert.deepEqual(none.catalogue.coins.map(c => c.coin), ['BTC']);
   assert.equal(buildCatalogue(lists({ AAA: { price: 2 } }), null, NOW).fresh, true);
-  const lost = buildCatalogue(lists({ AAA: { price: 2 } }), first, NOW + 1);
-  assert.equal(lost.catalogue, first);
-  assert.ok(lost.notes.some(n => /previous catalogue stands/.test(n)));
+  const again = buildCatalogue(lists({ AAA: { price: 2 } }), first, NOW + 1);
+  assert.equal(again.fresh, true);
+  assert.deepEqual(again.catalogue.coins.map(c => c.coin), ['BTC']);
+  assert.ok(kept.notes.some(n => /previous catalogue stands/.test(n)));
 });
 
 test('BTC is first and always the built-in listing, whatever the lists say', () => {
@@ -100,7 +98,8 @@ test('the tier follows the coin\'s volume against BTC\'s, and does not flip at t
   assert.equal(steadyTier(0.015, 1), 2, 'well under it, it moves');
   assert.equal(steadyTier(0.035, undefined), 2);
   const c = buildCatalogue(lists({ BIG: { price: 1 } }, 1e8 * 2), null, NOW).catalogue;
-  assert.equal(coinOf(c, 'BIG')!.tier, 0, 'half of BTC\'s volume is BTC\'s floors');
+  assert.equal(coinOf(c, 'BIG'), undefined, 'another coin is not given a tier');
+  assert.equal(c.coins[0]!.tier, 0);
 });
 
 test('a list read from JSON drops what it cannot use and keeps the rest', () => {
@@ -112,8 +111,8 @@ test('a list read from JSON drops what it cannot use and keeps the rest', () => 
     { coin: 'NOTIER', markets: { binance: { symbol: 'X', unit: 1 } }, tier: 9 },
     { coin: 'HALF', markets: { binance: { symbol: 'HALFUSDT', unit: 0 }, bybit: { symbol: 'HALF USDT', unit: 1 }, okx: { symbol: 'HALF-USDT-SWAP', unit: 1 } }, tier: 1 },
   ] })!;
-  assert.deepEqual(c.coins.map(x => x.coin), ['BTC', 'GOOD', 'HALF']);
-  assert.deepEqual(Object.keys(c.coins[2]!.markets), ['okx'], 'a malformed listing is left out of its coin');
+  assert.deepEqual(c.coins.map(x => x.coin), ['BTC'], 'every coin other than BTC is left out');
+  assert.deepEqual(c.coins[0]!.markets, BTC.markets);
   assert.deepEqual(c.lists, { binance: NOW });
   assert.deepEqual(ONLY_BTC.coins, [BTC]);
 });
@@ -126,16 +125,15 @@ test('every market is asked once and a failing one is null', async () => {
   assert.equal(new Set(asked).size, asked.length);
 });
 
-test('the shipped coin list is a list, BTC first, every coin on nine markets or more, and named the way the connectors name it', () => {
-  const shipped = parseCatalogue(JSON.parse(fs.readFileSync('src/app/public/coins.json', 'utf8')));
+test('the shipped coin list is BTC alone, named the way the connectors name it', () => {
+  const raw = JSON.parse(fs.readFileSync('src/app/public/coins.json', 'utf8')) as { coins: { coin: string }[] };
+  assert.deepEqual(raw.coins.map(c => c.coin), ['BTC'], 'the file itself names no other coin');
+  const shipped = parseCatalogue(raw);
   assert.ok(shipped, 'src/app/public/coins.json parses');
-  assert.equal(shipped.coins[0]!.coin, 'BTC');
-  assert.ok(shipped.coins.length > 100, `${shipped.coins.length} coins`);
-  for (const c of shipped.coins.slice(1)) assert.ok(Object.keys(c.markets).length >= KEEP_MARKETS, c.coin);
+  assert.deepEqual(shipped.coins.map(c => c.coin), ['BTC']);
+  assert.deepEqual(shipped.coins[0]!.markets, BTC.markets);
   assert.equal(instrumentIdFor('hyperliquid', BTC), 'hyperliquid:BTC-PERP');
-  assert.equal(instrumentIdFor('hyperliquidspot', BTC), 'hyperliquidspot:@142', 'spot is BTC\'s built-in pair, not a coin the list discovers');
-  assert.ok(shipped.coins.every(c => c.coin === 'BTC' || c.markets.hyperliquidspot === undefined));
-  assert.equal(instrumentIdFor('binance', shipped.coins.find(c => c.coin === 'PEPE')!), 'binance:1000PEPEUSDT');
+  assert.equal(instrumentIdFor('hyperliquidspot', BTC), 'hyperliquidspot:@142', 'spot is BTC\'s built-in pair');
 });
 
 test('the server builds its own list, serves it, and keeps the last one when a build fails', async () => {
@@ -161,7 +159,7 @@ test('the server builds its own list, serves it, and keeps the last one when a b
   assert.ok(fs.existsSync(file));
   assert.equal(list.send(res), true); assert.equal(sent.status, 200);
   const served = parseCatalogue(JSON.parse(sent.body!))!;
-  assert.equal(served.coins[0]!.coin, 'BTC'); assert.equal(served.builtAt, NOW);
+  assert.deepEqual(served.coins.map(c => c.coin), ['BTC']); assert.equal(served.builtAt, NOW);
   list.close();
   fs.rmSync(dir, { recursive: true, force: true });
 });

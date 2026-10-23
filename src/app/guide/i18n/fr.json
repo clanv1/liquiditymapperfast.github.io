@@ -178,7 +178,7 @@
  "sell": "vente",
  "buy": "achat",
  "**Absorption** squares mark where one side's market orders met resting orders at one price for more than a threshold within 10 ms.": "Les carrés d’**Absorption** marquent où des ordres au marché d’un côté ont rencontré des ordres en attente à un prix pour plus qu’un seuil en 10 ms.",
- "**Coin** switches to another coin on nine or more of these markets; the page reloads.": "**Crypto** passe à une autre crypto présente sur neuf de ces marchés ou plus ; la page se recharge.",
+ "**Coin** is Bitcoin. The page does not switch coins.": "**Crypto** est Bitcoin. La page ne change pas de crypto.",
  "**Delta** is each candle's market buys minus sells, as bars or as CVD candles, with divergences and **NL/NS**, an estimate of who opened and closed positions.": "**Delta**, c’est ce qui a été acheté au marché moins ce qui a été vendu dans chaque bougie, en barres ou en bougies de CVD, avec des divergences et **NL/NS**, une estimation de qui a ouvert et fermé des positions.",
  "[[?]]": "[[?]]",
  "All keys": "Toutes les touches",

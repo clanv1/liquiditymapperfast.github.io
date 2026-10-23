@@ -1,4 +1,4 @@
-// Builds the coin list the page offers (src/shared/coins.ts) from the eleven markets' public lists.
+// Builds the coin list the page offers (src/shared/coins.ts). The list is Bitcoin only; the markets' public lists supply BTC's price and volume.
 //
 //   npm run coins -- --out src/app/public/coins.json
 //   node build/tools/scripts/coins.mjs --previous https://liquiditymapperfast.github.io/coins.json --fallback src/app/public/coins.json --out dist/coins.json

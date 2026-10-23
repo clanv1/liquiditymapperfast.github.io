@@ -178,7 +178,7 @@
  "sell": "売り",
  "buy": "買い",
  "**Absorption** squares mark where one side's market orders met resting orders at one price for more than a threshold within 10 ms.": "**吸収**の四角は、片側の成行注文が 10 ms 以内に同じ価格で、しきい値を超える量の待機注文と約定した場所を示します。",
- "**Coin** switches to another coin on nine or more of these markets; the page reloads.": "**通貨**で、これらの市場のうち 9 つ以上にある別の通貨に切り替えます。ページは読み込み直されます。",
+ "**Coin** is Bitcoin. The page does not switch coins.": "**通貨**はビットコインです。ページは通貨を切り替えません。",
  "**Delta** is each candle's market buys minus sells, as bars or as CVD candles, with divergences and **NL/NS**, an estimate of who opened and closed positions.": "**デルタ**は各足の成行の買いから売りを引いたもので、バーまたは CVD ローソク足で表示し、ダイバージェンスと、誰がポジションを建て・決済したかの推定 **NL/NS** があります。",
  "[[?]]": "[[?]]",
  "All keys": "すべてのキー",

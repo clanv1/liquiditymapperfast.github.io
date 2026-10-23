@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import { BTC, COIN_VENUES, OPTIONAL_VENUES, instrumentIdFor, parseCatalogue, type Coin } from '../src/shared/coins.ts';
+import { BTC, COIN_VENUES, OPTIONAL_VENUES, instrumentIdFor, type Coin } from '../src/shared/coins.ts';
 import { BinancePerpConnector, BinancePerpTrades, BinanceSpotBook, DeribitConnector, HyperliquidConnector, MexcConnector, OkxConnector, browserVenues, BROWSER_VENUES } from '../src/shared/venues.ts';
 import { buildMexcSubscription } from '../src/adapters/mexc.mts';
 import { FlowSources } from '../src/server/v2/flow-sources.mts';
@@ -13,7 +12,6 @@ import { forCoin, tierFor } from '../src/app/coin.ts';
 import { price as fmtPrice, stepDecimals } from '../src/app/format.ts';
 import { GROUPS, groupsFor } from '../src/app/panes/ladder-zoom.ts';
 import { sizeBucketLabels } from '../src/app/panes/bar-stats.ts';
-import { matchCoins, scaleText } from '../src/app/coin-dialog.ts';
 import { keptChoice } from '../src/app/browser-source.ts';
 import { restoreSelection } from '../src/shared/venues.ts';
 
@@ -21,8 +19,20 @@ type Inside = { url(): string; open(send: (p: unknown) => void): void; usdOf(pri
 const inside = (c: BookConnector): Inside => c as unknown as Inside;
 const trades = (c: BookConnector): TradeEvent[] => { const out: TradeEvent[] = []; c.onTrade = t => { out.push(t); }; return out; };
 const msg = (value: unknown): string => JSON.stringify(value);
-const shipped = parseCatalogue(JSON.parse(fs.readFileSync('src/app/public/coins.json', 'utf8')))!;
-const coin = (name: string): Coin => shipped.coins.find(c => c.coin === name)!;
+/** A coin the page does not offer, so a connector built for it cannot be checked against the shipped list. */
+const lit: Coin = {
+  coin: 'LIT', volumeUsd: 1, price: 1, tier: 1,
+  markets: {
+    binance: { symbol: 'LITUSDT', unit: 1 }, binancespot: { symbol: 'LITUSDT', unit: 1 },
+    bybit: { symbol: 'LITUSDT', unit: 1 }, bybitspot: { symbol: 'LITUSDT', unit: 1 },
+    okx: { symbol: 'LIT-USDT-SWAP', unit: 1, contract: 1 }, okxspot: { symbol: 'LIT-USDT', unit: 1 },
+    bitget: { symbol: 'LITUSDT', unit: 1 }, bitgetspot: { symbol: 'LITUSDT', unit: 1 },
+    hyperliquid: { symbol: 'LIT', unit: 1 }, hyperliquidspot: { symbol: 'LIT', unit: 1 },
+    deribit: { symbol: 'LIT_USDC-PERPETUAL', unit: 1 }, coinbase: { symbol: 'LIT-USD', unit: 1 },
+  },
+};
+/** The same coin with no Coinbase market, so a saved Coinbase choice stays put. */
+const litNoCoinbase: Coin = { ...lit, markets: { ...lit.markets, coinbase: undefined } };
 /** Connectors whose open() asks a REST endpoint (a snapshot or the contract size) are only looked at by address here. */
 const fetchesOnOpen = (c: BookConnector): boolean => c instanceof BinancePerpConnector || c instanceof BinanceSpotBook || c instanceof OkxConnector;
 function frames(c: BookConnector): unknown[] { const sent: unknown[] = []; if (!fetchesOnOpen(c)) inside(c).open(p => sent.push(p)); return sent; }
@@ -48,23 +58,20 @@ test('BTC is read exactly as before: the same instruments, addresses and subscri
   for (const m of made) assert.equal(m.book.base, 'BTC');
 });
 
-test('every other coin is subscribed by its own names: nothing it asks for says BTC', () => {
+test('a connector built for another coin is subscribed by that coin\'s names: nothing it asks for says BTC', () => {
   let checked = 0;
-  for (const c of shipped.coins) {
-    if (c.coin === 'BTC' || c.coin.includes('BTC')) continue;
-    for (const venue of browserVenues(c)) {
-      if (!venue.listed) { assert.equal(c.markets[venue.id as keyof Coin['markets']], undefined); assert.throws(() => venue.make()); continue; }
-      const { book, feeds, liquidations } = venue.make();
-      assert.equal(book.instrumentId, instrumentIdFor(venue.id, c), `${c.coin} ${venue.id}`);
-      assert.equal(book.base, c.coin);
-      for (const connector of [book, ...feeds, ...(liquidations ?? [])]) {
-        const said = JSON.stringify([inside(connector).url(), frames(connector), connector.instrumentId]);
-        assert.ok(!said.includes('BTC') && !said.includes('btc'), `${c.coin} ${venue.id}: ${said}`);
-        checked++;
-      }
+  for (const venue of browserVenues(lit)) {
+    if (!venue.listed) { assert.equal(lit.markets[venue.id as keyof Coin['markets']], undefined); assert.throws(() => venue.make()); continue; }
+    const { book, feeds, liquidations } = venue.make();
+    assert.equal(book.instrumentId, instrumentIdFor(venue.id, lit), `${venue.id}`);
+    assert.equal(book.base, 'LIT');
+    for (const connector of [book, ...feeds, ...(liquidations ?? [])]) {
+      const said = JSON.stringify([inside(connector).url(), frames(connector), connector.instrumentId]);
+      assert.ok(!said.includes('BTC') && !said.includes('btc'), `${venue.id}: ${said}`);
+      checked++;
     }
   }
-  assert.ok(checked > 1000, `${checked} connectors`);
+  assert.ok(checked > 10, `${checked} connectors`);
 });
 
 const pepe: Market = { coin: 'PEPE', symbol: '1000PEPEUSDT', unit: 1000 };
@@ -227,15 +234,15 @@ test('a coin\'s tier stays what its recordings were made at while they last, and
   assert.equal(tierFor(aaa, now, { AAA: { at: now - 3_600_000, tier: 2 } }), 2, 'recordings made at tier 2 are still kept');
   assert.equal(tierFor(aaa, now, { AAA: { at: now - 2 * 86_400_000, tier: 2 } }), 3, 'nothing left from then');
   assert.equal(tierFor(BTC, now, { BTC: { at: now, tier: 3 } }), 0);
-  const moved = forCoin({ heatmapSource: 'binance:BTCUSDT', ladderVenue: 'hyperliquid:BTC-PERP', ladderVenues: ['coinbase:BTC-USD', 'okx:BTC-USDT-SWAP'] }, coin('LIT'), BTC);
+  const moved = forCoin({ heatmapSource: 'binance:BTCUSDT', ladderVenue: 'hyperliquid:BTC-PERP', ladderVenues: ['coinbase:BTC-USD', 'okx:BTC-USDT-SWAP'] }, litNoCoinbase, BTC);
   assert.deepEqual(moved, { heatmapSource: 'binance:LITUSDT', ladderVenue: 'hyperliquid:LIT-PERP', ladderVenues: ['coinbase:BTC-USD', 'okx:LIT-USDT-SWAP'] }, 'a market without the coin keeps the old choice');
-  assert.deepEqual(forCoin({ heatmapSource: 'aggregated', ladderVenue: '', ladderVenues: [] }, coin('LIT'), BTC), { heatmapSource: 'aggregated', ladderVenue: '', ladderVenues: [] });
-  assert.deepEqual(forCoin(moved, BTC, coin('LIT')).heatmapSource, 'binance:BTCUSDT', 'and back');
+  assert.deepEqual(forCoin({ heatmapSource: 'aggregated', ladderVenue: '', ladderVenues: [] }, litNoCoinbase, BTC), { heatmapSource: 'aggregated', ladderVenue: '', ladderVenues: [] });
+  assert.deepEqual(forCoin(moved, BTC, litNoCoinbase).heatmapSource, 'binance:BTCUSDT', 'and back');
   // A server's own instruments (a server set to a spot market) are nobody's browser instrument: they never move, and on the coin the
   // choices were made on nothing moves at all.
   const server = { heatmapSource: 'binance:BTCUSDT:spot', ladderVenue: 'okx:BTC-USDT', ladderVenues: ['bybit:BTCUSDT:spot'] };
   assert.deepEqual(forCoin(server, BTC, null), server);
-  assert.deepEqual(forCoin(server, coin('LIT'), BTC), server);
+  assert.deepEqual(forCoin(server, litNoCoinbase, BTC), server);
 });
 
 test('a venue choice applied on a coin some markets do not list leaves those markets as the saved choice had them', () => {
@@ -256,15 +263,11 @@ test('a venue choice applied on a coin some markets do not list leaves those mar
   assert.ok(old.known.includes('coinbase'), 'Coinbase was among the first eight, so it was seen and left out');
 });
 
-test('the order book steps, the size buckets and the coin search follow the coin', () => {
+test('the order book steps and the size buckets follow the price', () => {
   assert.equal(groupsFor(83_000), GROUPS); assert.equal(groupsFor(0), GROUPS);
   assert.deepEqual(groupsFor(2_500).slice(0, 3), [0.001, 0.002, 0.005]);
   assert.equal(groupsFor(0.000004)[0], 1e-11);
   assert.deepEqual(sizeBucketLabels(), ['< $25K', '$25K-50K', '$50K-100K', '$100K-250K', '$250K-500K', '$500K-1M', '$1M-5M', '$5M+'], 'BTC\'s are as they were');
-  const found = matchCoins(shipped.coins, 'pe'), starts = found.filter(c => c.coin.startsWith('PE')).length;
-  assert.ok(starts > 0 && found.every((c, i) => c.coin.includes('PE') && (i < starts) === c.coin.startsWith('PE')), 'names that start with it first, then the rest that contain it');
-  assert.equal(matchCoins(shipped.coins, '').length, shipped.coins.length);
-  assert.equal(scaleText(0.1), '×0.1'); assert.equal(scaleText(0.04), '×0.04');
   assert.deepEqual(BROWSER_VENUES.map(v => v.id).sort(), [...COIN_VENUES, ...OPTIONAL_VENUES].sort(), 'the eleven of the coin list, and the optional ones');
 });
 
@@ -286,7 +289,7 @@ test('MEXC: the best 20 levels and trades on one socket, sizes in contracts of 0
   const venue = BROWSER_VENUES.find(v => v.id === 'mexc')!;
   assert.equal(venue.recommended, false); assert.equal(venue.probe, null); assert.equal(venue.kind, 'perp');
   assert.equal(BROWSER_VENUES[BROWSER_VENUES.length - 1]!.id, 'mexc', 'last: the reference price is taken in this order');
-  assert.equal(browserVenues(coin('PEPE')).find(v => v.id === 'mexc')!.listed, false, 'other coins until the coin list carries MEXC');
+  assert.equal(browserVenues(lit).find(v => v.id === 'mexc')!.listed, false, 'MEXC is BTC\'s built-in contract, not another coin\'s');
 });
 
 test('the server takes MEXC trades from this connector when it has the MEXC book the feed manager names the same way', () => {

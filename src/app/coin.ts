@@ -1,19 +1,16 @@
-import { BTC, ONLY_BTC, SCALES, instrumentIdFor, parseCatalogue, type Catalogue, type Coin } from '../shared/coins.ts';
+import { BTC, SCALES, instrumentIdFor, type Coin } from '../shared/coins.ts';
 import { BROWSER_RETENTION_MS } from '../shared/recorder.ts';
 import type { AppState } from './store.ts';
 
 /**
- * The coin the page is on. It is chosen once, before anything is built, and stays for the page's life: choosing another loads the page again
- * with `?coin=` (new sockets, recorders and caches, so nothing of the last coin is carried over). Size thresholds (trade bubbles,
- * absorption, sounds, the size strip) are kept as BTC's and multiplied by the coin's scale where they are used, so one setting serves
- * every coin.
+ * The coin the page is on. It is Bitcoin, chosen once before anything is built, and it stays for the page's life. An address, a saved
+ * coin or a coin list cannot select another. Size thresholds (trade bubbles, absorption, sounds, the size strip) are BTC's.
  */
 
-/** The last coin chosen, the last coin list read, and when each coin was last open with the size tier its recordings were made at. */
-const LAST_KEY = 'lmf.coin', LIST_KEY = 'lmf.coins', OPENED_KEY = 'lmf.coins.opened';
+/** The last coin chosen, and when each coin was last open with the size tier its recordings were made at. */
+const LAST_KEY = 'lmf.coin', OPENED_KEY = 'lmf.coins.opened';
 /** The coin whose instruments the saved choices name (they were made on it, or moved to it by `forCoin`). */
 const SAVED_ON_KEY = 'lmf.coin.saved';
-const COIN_NAME = /^[A-Z0-9]{1,15}$/;
 /** How often an open page says its coin is still open (the tier and the recordings stay while it is). */
 const STILL_OPEN_MS = 10 * 60_000;
 
@@ -28,7 +25,6 @@ export interface CoinChoice {
 }
 
 let chosen: CoinChoice = { coin: BTC, tier: 0, notice: null, from: null };
-let list: Catalogue | null = null;
 
 export const currentCoin = (): Coin => chosen.coin;
 export const coinChoice = (): CoinChoice => chosen;
@@ -46,18 +42,6 @@ export const recorderLockName = (coin: string): string => coin === 'BTC' ? 'lmf-
 
 function readJson(key: string): unknown { try { return JSON.parse(localStorage.getItem(key) ?? 'null'); } catch { return null; } }
 function writeJson(key: string, value: unknown): void { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode or full: kept for this visit only */ } }
-
-/** The coin list: the page's own copy (same origin, rebuilt daily), else the last one this browser read, else BTC alone. Read once. */
-export async function loadCatalogue(): Promise<Catalogue> {
-  if (list) return list;
-  try {
-    const response = await fetch('coins.json', { cache: 'no-cache', signal: AbortSignal.timeout(6_000) });
-    const fresh = response.ok ? parseCatalogue(await response.json()) : null;
-    if (fresh) { writeJson(LIST_KEY, fresh); list = fresh; return fresh; }
-  } catch { /* the saved copy below */ }
-  list = parseCatalogue(readJson(LIST_KEY)) ?? ONLY_BTC;
-  return list;
-}
 
 type Opened = Record<string, { at: number; tier: number }>;
 function opened(): Opened {
@@ -79,39 +63,17 @@ export function tierFor(coin: Coin, now: number, seen: Opened = opened()): numbe
   return last && now - last.at < BROWSER_RETENTION_MS ? last.tier : coin.tier;
 }
 
-/** The coin asked for in the address, else the last one chosen here, else BTC. */
-export function requestedCoin(params: URLSearchParams): string {
-  const asked = (params.get('coin') ?? '').trim().toUpperCase();
-  if (COIN_NAME.test(asked)) return asked;   // anything else in the address is not a coin, and is not repeated on the page
-  const last = readJson(LAST_KEY);
-  return typeof last === 'string' && COIN_NAME.test(last) ? last : 'BTC';
-}
-
 /**
- * Settle the coin for this page. BTC needs no list (it is built in), so a BTC page does not wait for one; another coin is looked up in the
- * list, and when it is not there (it left the list, or no list could be read) the page opens on BTC and says why.
+ * Settle this page on BTC. The address's `?coin=` is removed, and a saved coin is not read: nothing but Bitcoin is offered.
  */
-export async function chooseCoin(params: URLSearchParams, now = Date.now()): Promise<CoinChoice> {
-  const asked = requestedCoin(params);
-  let coin: Coin = BTC, notice: CoinChoice['notice'] = null;
-  if (asked !== 'BTC') {
-    const catalogue = await loadCatalogue(), found = catalogue.coins.find(c => c.coin === asked);
-    if (found) coin = found;
-    // A list that holds BTC alone is one that could not be read: the coin may well be on the real one.
-    else notice = { coin: asked, reason: catalogue.coins.length > 1 ? 'missing' : 'unreadable' };
-  }
-  const savedOn = readJson(SAVED_ON_KEY), madeOn = typeof savedOn === 'string' && COIN_NAME.test(savedOn) ? savedOn : 'BTC';
-  const from = madeOn === coin.coin ? null : madeOn === 'BTC' ? BTC : (list ?? parseCatalogue(readJson(LIST_KEY)))?.coins.find(c => c.coin === madeOn) ?? null;
-  const seen = opened(), tier = tierFor(coin, now, seen);
-  chosen = { coin, tier, notice, from };
-  writeJson(SAVED_ON_KEY, coin.coin);
-  // Kept for the next visit unless the list could not be read (the coin asked for stays the one to try again).
-  if (notice?.reason !== 'unreadable') writeJson(LAST_KEY, coin.coin);
-  seen[coin.coin] = { at: now, tier }; writeJson(OPENED_KEY, seen);
-  // The address names the coin, so a reload or a bookmark comes back to it (BTC is the plain address).
+export async function chooseCoin(_params: URLSearchParams, now = Date.now()): Promise<CoinChoice> {
+  const seen = opened();
+  chosen = { coin: BTC, tier: 0, notice: null, from: null };
+  writeJson(SAVED_ON_KEY, 'BTC');
+  writeJson(LAST_KEY, 'BTC');
+  seen.BTC = { at: now, tier: 0 }; writeJson(OPENED_KEY, seen);
   const url = new URL(location.href);
-  if (coin.coin === 'BTC') url.searchParams.delete('coin'); else url.searchParams.set('coin', coin.coin);
-  if (url.href !== location.href && notice?.reason !== 'unreadable') history.replaceState(history.state, '', url);
+  if (url.searchParams.has('coin')) { url.searchParams.delete('coin'); if (url.href !== location.href) history.replaceState(history.state, '', url); }
   return chosen;
 }
 
@@ -144,11 +106,3 @@ export function forCoin<S extends Pick<AppState, 'heatmapSource' | 'ladderVenue'
   return { ...state, heatmapSource: state.heatmapSource === 'aggregated' ? state.heatmapSource : move(state.heatmapSource), ladderVenue: state.ladderVenue ? move(state.ladderVenue) : state.ladderVenue, ladderVenues: state.ladderVenues.map(move) };
 }
 
-/** Open the page on another coin (the page loads again; see the top of this file). */
-export function switchCoin(coin: string): void {
-  if (coin === chosen.coin.coin) return;
-  writeJson(LAST_KEY, coin);
-  const url = new URL(location.href);
-  if (coin === 'BTC') url.searchParams.delete('coin'); else url.searchParams.set('coin', coin);
-  location.assign(url.href);
-}

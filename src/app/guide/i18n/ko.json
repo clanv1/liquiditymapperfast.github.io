@@ -178,7 +178,7 @@
  "sell": "매도",
  "buy": "매수",
  "**Absorption** squares mark where one side's market orders met resting orders at one price for more than a threshold within 10 ms.": "**흡수** 사각형은 한쪽 시장가 주문이 10 ms 안에 같은 가격에서 임계값을 넘는 양의 대기 주문과 체결된 곳을 표시합니다.",
- "**Coin** switches to another coin on nine or more of these markets; the page reloads.": "**코인**은 이 시장들 중 9곳 이상에 있는 다른 코인으로 바꿉니다. 페이지가 다시 열립니다.",
+ "**Coin** is Bitcoin. The page does not switch coins.": "**코인**은 비트코인입니다. 페이지는 코인을 바꾸지 않습니다.",
  "**Delta** is each candle's market buys minus sells, as bars or as CVD candles, with divergences and **NL/NS**, an estimate of who opened and closed positions.": "**델타**는 각 캔들의 시장가 매수에서 매도를 뺀 값으로, 막대나 CVD 캔들로 보이며 다이버전스와, 누가 포지션을 열고 닫았는지 추정하는 **NL/NS** 가 있습니다.",
  "[[?]]": "[[?]]",
  "All keys": "모든 키",

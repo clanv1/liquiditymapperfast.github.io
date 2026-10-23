@@ -178,7 +178,7 @@
  "sell": "продажа",
  "buy": "покупка",
  "**Absorption** squares mark where one side's market orders met resting orders at one price for more than a threshold within 10 ms.": "Квадраты **поглощения** отмечают, где рыночные ордера одной стороны встретили лимитные ордера на одной цене больше порога в пределах 10 мс.",
- "**Coin** switches to another coin on nine or more of these markets; the page reloads.": "**Монета** переключает на другую монету, которая есть на девяти или более этих рынках; страница перезагружается.",
+ "**Coin** is Bitcoin. The page does not switch coins.": "**Монета** — биткоин. Страница не переключает монету.",
  "**Delta** is each candle's market buys minus sells, as bars or as CVD candles, with divergences and **NL/NS**, an estimate of who opened and closed positions.": "**Дельта** — это купленное по рынку минус проданное в каждой свече, столбиками или свечами CVD, с дивергенциями и **NL/NS** — оценкой того, кто открывал и закрывал позиции.",
  "[[?]]": "[[?]]",
  "All keys": "Все клавиши",

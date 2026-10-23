@@ -178,7 +178,7 @@
  "sell": "卖出",
  "buy": "买入",
  "**Absorption** squares mark where one side's market orders met resting orders at one price for more than a threshold within 10 ms.": "**吸收**方块标出同一方向的市价单在 10 毫秒内于同一价格与超过阈值的挂单成交的位置。",
- "**Coin** switches to another coin on nine or more of these markets; the page reloads.": "**币种**可切换到在这些市场中至少九个上线的其他币种；页面会重新加载。",
+ "**Coin** is Bitcoin. The page does not switch coins.": "**币种**是比特币。页面不切换币种。",
  "**Delta** is each candle's market buys minus sells, as bars or as CVD candles, with divergences and **NL/NS**, an estimate of who opened and closed positions.": "**Delta** 是每根 K 线中以市价买入减去卖出的量，以柱或 CVD K 线显示，并有背离和 **NL/NS**——对谁开仓、谁平仓的估算。",
  "[[?]]": "[[?]]",
  "All keys": "全部快捷键",

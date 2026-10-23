@@ -1,11 +1,10 @@
 /**
- * The coins the page offers: BTC, and every coin listed on at least nine of the eleven markets the browser reads, with each market's own
- * name for it. The list is built once a day from the markets' public lists (`scripts/coins.mts`: GitHub Actions for the site, the server for
- * itself) and the page reads it at start. Building it is pure: the lists come in as parsed JSON, so a test can say what each market answered.
+ * The page offers Bitcoin only. BTC's markets are built in (`BTC`); a catalogue read from JSON or built from the markets' public lists
+ * keeps that one entry and drops every other coin, so the daily rebuild (`scripts/coins.mts`, the server, GitHub Actions) cannot put
+ * another coin back. Building it is pure: the lists come in as parsed JSON, so a test can say what each market answered.
  *
- * A ticker can name different tokens on different markets (LIT on Binance spot is another token), and some markets list a coin in units of
- * 1000 (1000PEPEUSDT, kPEPE). Every listing is converted to the price of one coin and kept only when that price agrees with the other
- * markets' within 2 %.
+ * The readers below still turn a market's public list into rows (a unit of 1000, an OKX contract size, Deribit's inverse perpetual).
+ * `buildCatalogue` uses them for BTC's price and volume, and to say which lists were read.
  */
 
 /** The markets there were before a saved venue choice recorded which ones it had seen (shared/venues.ts restoreSelection). */
@@ -65,13 +64,11 @@ export const BTC: Coin = {
   },
 };
 
-/** A coin enters the list on this many markets and leaves it below `KEEP_MARKETS`, so one that sits at the edge does not come and go. */
+/** How many of the eleven markets used to admit a coin. The catalogue no longer admits one by this count: it is BTC only. */
 export const MIN_MARKETS = 9, KEEP_MARKETS = 8;
-/** Listings whose price is further than this from the median of the coin's markets name another token (or another unit). */
-const PRICE_AGREEMENT = 0.02;
-/** A day's list that reads fewer markets than this, or loses more than this share of the coins, is not used: the previous one stands. */
-const MIN_LISTS = 6, MAX_LOSS = 0.3;
-/** Coin names the page can put in an address and a database name. */
+/** A day's list that reads fewer markets than this is not used: the previous catalogue stands (still BTC only). */
+const MIN_LISTS = 6;
+/** Names a market's list may use for a base. Anything else is not a row. */
 const COIN_NAME = /^[A-Z0-9]{1,15}$/;
 
 /**
@@ -222,93 +219,63 @@ const median = (values: readonly number[]): number => { const s = [...values].so
 const sig = (value: number): number => Number(value.toPrecision(6));
 
 /**
- * The day's catalogue from the markets' lists and the previous catalogue. A market whose list could not be read (null) keeps the listings
- * it had in the previous one; they count for the coins that still trade elsewhere, but take no part in the price check. A coin enters on
- * MIN_MARKETS markets and stays while it has KEEP_MARKETS. With too few lists, or a list that loses too many coins (a market changed its
- * format), the previous catalogue stands, and the reason is in `notes`.
+ * The day's catalogue: BTC, with its built-in markets and the price and volume the lists reported for it. Every other row is ignored.
+ * With too few lists the previous catalogue stands (and is still read back as BTC only); the reason is in `notes`.
  */
 export function buildCatalogue(lists: Partial<Record<CoinVenue, ListRow[] | null>>, previous: Catalogue | null, now: number): { catalogue: Catalogue; notes: string[]; fresh: boolean } {
   const notes: string[] = [];
   const read = COIN_VENUES.filter(v => lists[v]?.length);
   for (const v of COIN_VENUES) if (!read.includes(v)) notes.push(`${v}: list not read${previous?.lists[v] ? `, keeping its listings from ${new Date(previous.lists[v]!).toISOString()}` : ''}`);
   // Too few lists is no day's list, whether or not there is one to keep (with none, BTC alone stands in, and `fresh` says it is not one).
-  if (read.length < MIN_LISTS) { notes.push(`only ${read.length} lists read: ${previous ? 'the previous catalogue stands' : 'no list built'}`); return { catalogue: previous ?? ONLY_BTC, notes, fresh: false }; }
+  if (read.length < MIN_LISTS) { notes.push(`only ${read.length} lists read: ${previous ? 'the previous catalogue stands' : 'no list built'}`); return { catalogue: previous ? btcHeld(previous) : ONLY_BTC, notes, fresh: false }; }
 
-  const before = new Map((previous?.coins ?? []).map(c => [c.coin, c]));
-  const byCoin = new Map<string, Map<CoinVenue, ListRow>>();
+  const btcRows = new Map<CoinVenue, ListRow>();
   for (const venue of read) for (const row of lists[venue]!) {
-    const markets = byCoin.get(row.coin) ?? new Map<CoinVenue, ListRow>(); byCoin.set(row.coin, markets);
-    // One listing per market: the first, unless a coin-margined one comes later (Deribit lists both for BTC and ETH).
-    const held = markets.get(venue);
-    if (!held || (row.listing.inverse && !held.listing.inverse) || (!held.listing.inverse === !row.listing.inverse && row.volumeUsd > held.volumeUsd)) markets.set(venue, row);
+    if (row.coin !== 'BTC') continue;
+    // One listing per market: the first, unless a coin-margined one comes later (Deribit lists both).
+    const held = btcRows.get(venue);
+    if (!held || (row.listing.inverse && !held.listing.inverse) || (!held.listing.inverse === !row.listing.inverse && row.volumeUsd > held.volumeUsd)) btcRows.set(venue, row);
   }
-
-  const btcRows = byCoin.get('BTC'), btcVolume = btcRows ? [...btcRows.values()].reduce((a, r) => a + r.volumeUsd, 0) : 0;
-  const coins: Coin[] = [];
-  for (const [coin, markets] of byCoin) {
-    if (coin === 'BTC') continue;
-    const mid = median([...markets.values()].map(r => r.price));
-    const agree = [...markets].filter(([, r]) => Math.abs(r.price / mid - 1) <= PRICE_AGREEMENT);
-    const listings: Partial<Record<CoinVenue, Listing>> = Object.fromEntries(agree.map(([v, r]) => [v, r.listing]));
-    const old = before.get(coin);
-    if (old) for (const v of COIN_VENUES) if (!read.includes(v) && old.markets[v]) listings[v] = old.markets[v];
-    const count = Object.keys(listings).length;
-    if (count < (old ? KEEP_MARKETS : MIN_MARKETS)) continue;
-    const volumeUsd = agree.reduce((a, [, r]) => a + r.volumeUsd, 0);
-    const ratio = btcVolume > 0 ? volumeUsd / btcVolume : 0;
-    const ordered = Object.fromEntries(COIN_VENUES.filter(v => listings[v]).map(v => [v, listings[v]!])) as Partial<Record<CoinVenue, Listing>>;
-    coins.push({ coin, markets: ordered, volumeUsd: Math.round(volumeUsd), price: sig(median(agree.map(([, r]) => r.price))), tier: steadyTier(ratio, old?.tier) });
-  }
-  coins.sort((a, b) => b.volumeUsd - a.volumeUsd || a.coin.localeCompare(b.coin));
-  const btcPrice = btcRows ? sig(median([...btcRows.values()].map(r => r.price))) : before.get('BTC')?.price ?? 0;
-  const out: Catalogue = {
-    version: 1, builtAt: now,
-    lists: Object.fromEntries(COIN_VENUES.flatMap(v => read.includes(v) ? [[v, now]] : previous?.lists[v] ? [[v, previous.lists[v]!]] : [])),
-    coins: [{ ...BTC, volumeUsd: Math.round(btcVolume), price: btcPrice }, ...coins],
+  const btcVolume = [...btcRows.values()].reduce((a, r) => a + r.volumeUsd, 0);
+  const btcPrice = btcRows.size ? sig(median([...btcRows.values()].map(r => r.price))) : previous?.coins.find(c => c.coin === 'BTC')?.price ?? 0;
+  return {
+    catalogue: {
+      version: 1, builtAt: now,
+      lists: Object.fromEntries(COIN_VENUES.flatMap(v => read.includes(v) ? [[v, now]] : previous?.lists[v] ? [[v, previous.lists[v]!]] : [])),
+      coins: [{ ...BTC, volumeUsd: Math.round(btcVolume), price: btcPrice }],
+    },
+    notes, fresh: true,
   };
-  if (previous && out.coins.length < (1 - MAX_LOSS) * previous.coins.length) {
-    notes.push(`${out.coins.length} coins against ${previous.coins.length} before: the previous catalogue stands`);
-    return { catalogue: previous, notes, fresh: false };
-  }
-  return { catalogue: out, notes, fresh: true };
 }
 
 // ---- Reading a catalogue ------------------------------------------------------------------------------------------------------------
 
-function parseListing(value: unknown): Listing | null {
-  const symbol = at(value, 'symbol'), unit = num(at(value, 'unit')), contract = at(value, 'contract'), inverse = at(value, 'inverse');
-  if (typeof symbol !== 'string' || !/^[A-Za-z0-9_\-]{1,40}$/.test(symbol) || !(unit > 0)) return null;
-  if (contract !== undefined && !(num(contract) > 0)) return null;
-  return { symbol, unit, ...(contract !== undefined ? { contract: num(contract) } : {}), ...(inverse === true ? { inverse: true } : {}) };
-}
-
 /**
- * A catalogue from JSON, or null when it is not one. Coins with a malformed name or listing are left out rather than failing the whole
- * list, and BTC is always the built-in entry (with the list's price and volume).
+ * A catalogue from JSON, or null when it is not one. Every coin other than BTC is left out, and BTC is always the built-in entry (with
+ * the list's price and volume), so an older file that named other coins cannot bring them back.
  */
 export function parseCatalogue(value: unknown): Catalogue | null {
   if (at(value, 'version') !== 1 || !Array.isArray(at(value, 'coins'))) return null;
-  const coins: Coin[] = [];
   let btc: Coin = BTC;
   for (const c of list(at(value, 'coins'))) {
-    const coin = at(c, 'coin');
-    if (typeof coin !== 'string' || !COIN_NAME.test(coin) || coins.some(x => x.coin === coin)) continue;
-    if (coin === 'BTC') { btc = { ...BTC, volumeUsd: Math.max(0, num(at(c, 'volumeUsd')) || 0), price: Math.max(0, num(at(c, 'price')) || 0) }; continue; }
-    const markets: Partial<Record<CoinVenue, Listing>> = {};
-    for (const v of COIN_VENUES) { const l = parseListing(at(c, 'markets', v)); if (l) markets[v] = l; }
-    const tier = num(at(c, 'tier'));
-    if (!Object.keys(markets).length || !Number.isInteger(tier) || tier < 0 || tier >= SCALES.length) continue;
-    coins.push({ coin, markets, volumeUsd: Math.max(0, num(at(c, 'volumeUsd')) || 0), price: Math.max(0, num(at(c, 'price')) || 0), tier });
+    if (at(c, 'coin') !== 'BTC') continue;
+    btc = { ...BTC, volumeUsd: Math.max(0, num(at(c, 'volumeUsd')) || 0), price: Math.max(0, num(at(c, 'price')) || 0) };
   }
   const lists: Partial<Record<CoinVenue, number>> = {};
   for (const v of COIN_VENUES) { const t = num(at(value, 'lists', v)); if (t > 0) lists[v] = t; }
-  return { version: 1, builtAt: num(at(value, 'builtAt')) || 0, lists, coins: [btc, ...coins] };
+  return { version: 1, builtAt: num(at(value, 'builtAt')) || 0, lists, coins: [btc] };
 }
 
 /** The catalogue that holds only BTC, for a page that could not read one. */
 export const ONLY_BTC: Catalogue = { version: 1, builtAt: 0, lists: {}, coins: [BTC] };
 
-/** The instrument id a market's connector gives the coin there (the connectors in shared/venues.ts: "hyperliquid:BTC-PERP", "binance:1000PEPEUSDT"), or null where it is not listed. */
+/** A catalogue with every coin but BTC removed, and BTC's markets put back to the built-in entry. */
+function btcHeld(catalogue: Catalogue): Catalogue {
+  const btc = catalogue.coins.find(c => c.coin === 'BTC');
+  return { ...catalogue, coins: [{ ...BTC, volumeUsd: btc?.volumeUsd ?? 0, price: btc?.price ?? 0 }] };
+}
+
+/** The instrument id a market's connector gives the coin there (the connectors in shared/venues.ts: "hyperliquid:BTC-PERP", "binance:BTCUSDT"), or null where it is not listed. */
 export function instrumentIdFor(venue: string, coin: Coin): string | null {
   const listing = coin.markets[venue as MarketVenue];
   if (!listing) return null;

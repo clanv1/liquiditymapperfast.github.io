@@ -178,7 +178,7 @@
  "sell": "satış",
  "buy": "alış",
  "**Absorption** squares mark where one side's market orders met resting orders at one price for more than a threshold within 10 ms.": "**Emilim** kareleri, bir taraftaki piyasa emirlerinin 10 ms içinde tek bir fiyatta eşiği aşan miktarda bekleyen emirle karşılaştığı yerleri işaretler.",
- "**Coin** switches to another coin on nine or more of these markets; the page reloads.": "**Coin**, bu piyasaların dokuz veya daha fazlasında bulunan başka bir coine geçer; sayfa yeniden yüklenir.",
+ "**Coin** is Bitcoin. The page does not switch coins.": "**Coin** Bitcoin'dir. Sayfa coin değiştirmez.",
  "**Delta** is each candle's market buys minus sells, as bars or as CVD candles, with divergences and **NL/NS**, an estimate of who opened and closed positions.": "**Delta**, her mumda piyasa emriyle alınanın satılandan farkıdır; çubuk ya da CVD mumu olarak, uyumsuzluklar ve pozisyonları kimin açıp kapattığına dair bir tahmin olan **NL/NS** ile.",
  "[[?]]": "[[?]]",
  "All keys": "Tüm tuşlar",
