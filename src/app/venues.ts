@@ -2,7 +2,7 @@
 const NAMES: Readonly<Record<string, string>> = {
   aster: 'Aster', binance: 'Binance', binanceus: 'Binance US', binancespot: 'Binance spot', bitfinex: 'Bitfinex', bitget: 'Bitget', bitgetspot: 'Bitget spot', bitmart: 'BitMart', bitmex: 'BitMEX',
   bitstamp: 'Bitstamp', bitunix: 'Bitunix', bybit: 'Bybit', bybitspot: 'Bybit spot', coinbase: 'Coinbase', cryptocom: 'Crypto.com', deribit: 'Deribit', dydx: 'dYdX', gateio: 'Gate.io',
-  hitbtc: 'HitBTC', htx: 'HTX', hyperliquid: 'Hyperliquid', hyperliquidspot: 'Hyperliquid spot', kraken: 'Kraken', kucoin: 'KuCoin', mexc: 'MEXC', okx: 'OKX', okxspot: 'OKX spot', phemex: 'Phemex', poloniex: 'Poloniex', whitebit: 'WhiteBIT',
+  hitbtc: 'HitBTC', htx: 'HTX', hyperliquid: 'Hyperliquid', hyperliquidspot: 'Hyperliquid spot', kraken: 'Kraken', krakenspot: 'Kraken spot', kucoin: 'KuCoin', mexc: 'MEXC', okx: 'OKX', okxspot: 'OKX spot', phemex: 'Phemex', poloniex: 'Poloniex', whitebit: 'WhiteBIT',
 };
 
 /** A short handle for a venue in popups: "binance-spot", "hyperliquid". */

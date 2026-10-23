@@ -39,11 +39,11 @@ function frames(c: BookConnector): unknown[] { const sent: unknown[] = []; if (!
 
 test('BTC is read exactly as before: the same instruments, addresses and subscriptions', () => {
   const made = BROWSER_VENUES.map(v => v.make());
-  assert.deepEqual(made.map(m => m.book.instrumentId), ['binance:BTCUSDT', 'bybit:BTCUSDT', 'okx:BTC-USDT-SWAP', 'bitget:BTCUSDT', 'hyperliquid:BTC-PERP', 'hyperliquidspot:@142', 'deribit:BTC-PERPETUAL', 'binancespot:BTCUSDT', 'coinbase:BTC-USD', 'bybitspot:BTCUSDT', 'okxspot:BTC-USDT', 'bitgetspot:BTCUSDT', 'mexc:BTC_USDT'], 'the twelve, and MEXC after them');
+  assert.deepEqual(made.map(m => m.book.instrumentId), ['binance:BTCUSDT', 'bybit:BTCUSDT', 'okx:BTC-USDT-SWAP', 'bitget:BTCUSDT', 'hyperliquid:BTC-PERP', 'hyperliquidspot:@142', 'deribit:BTC-PERPETUAL', 'kraken:PF_XBTUSD', 'binancespot:BTCUSDT', 'coinbase:BTC-USD', 'bybitspot:BTCUSDT', 'okxspot:BTC-USDT', 'bitgetspot:BTCUSDT', 'krakenspot:BTC/USD', 'mexc:BTC_USDT'], 'the fourteen, and MEXC after them');
   assert.deepEqual(made.flatMap(m => [m.book, ...m.feeds]).map(c => inside(c).url()), [
     'wss://fstream.binance.com/public/ws/btcusdt@depth@100ms', 'wss://fstream.binance.com/market/ws/btcusdt@aggTrade', 'wss://stream.bybit.com/v5/public/linear', 'wss://ws.okx.com:8443/ws/v5/public',
-    'wss://ws.bitget.com/v2/ws/public', 'wss://api.hyperliquid.xyz/ws', 'wss://api.hyperliquid.xyz/ws', 'wss://www.deribit.com/ws/api/v2', 'wss://stream.binance.com:9443/ws/btcusdt@depth@100ms', 'wss://stream.binance.com:9443/ws/btcusdt@aggTrade',
-    'wss://ws-feed.exchange.coinbase.com', 'wss://stream.bybit.com/v5/public/spot', 'wss://ws.okx.com:8443/ws/v5/public', 'wss://ws.bitget.com/v2/ws/public', 'wss://contract.mexc.com/edge']);
+    'wss://ws.bitget.com/v2/ws/public', 'wss://api.hyperliquid.xyz/ws', 'wss://api.hyperliquid.xyz/ws', 'wss://www.deribit.com/ws/api/v2', 'wss://futures.kraken.com/ws/v1', 'wss://stream.binance.com:9443/ws/btcusdt@depth@100ms', 'wss://stream.binance.com:9443/ws/btcusdt@aggTrade',
+    'wss://ws-feed.exchange.coinbase.com', 'wss://stream.bybit.com/v5/public/spot', 'wss://ws.okx.com:8443/ws/v5/public', 'wss://ws.bitget.com/v2/ws/public', 'wss://ws.kraken.com/v2', 'wss://contract.mexc.com/edge']);
   const sent = Object.fromEntries(made.map(m => [m.book.id, frames(m.book)]));
   assert.deepEqual(sent.bybit, [{ op: 'subscribe', args: ['orderbook.1000.BTCUSDT', 'publicTrade.BTCUSDT', 'allLiquidation.BTCUSDT'] }], 'and its liquidations on the same socket');
   assert.deepEqual(made.flatMap(m => m.liquidations ?? []).map(c => inside(c).url()), ['wss://fstream.binance.com/market/stream?streams=btcusdt@forceOrder/btcusdt@markPrice@1s'], 'Binance liquidations on a socket of their own');
@@ -51,6 +51,8 @@ test('BTC is read exactly as before: the same instruments, addresses and subscri
   assert.deepEqual(sent.hyperliquid, [{ method: 'subscribe', subscription: { type: 'l2Book', coin: 'BTC', nSigFigs: 3 } }, { method: 'subscribe', subscription: { type: 'trades', coin: 'BTC' } }]);
   assert.deepEqual(sent.hyperliquidspot, [{ method: 'subscribe', subscription: { type: 'l2Book', coin: '@142' } }, { method: 'subscribe', subscription: { type: 'trades', coin: '@142' } }]);
   assert.deepEqual(sent.deribit, [{ jsonrpc: '2.0', id: 1, method: 'public/subscribe', params: { channels: ['book.BTC-PERPETUAL.100ms', 'trades.BTC-PERPETUAL.100ms'] } }]);
+  assert.deepEqual(sent.kraken, [{ event: 'subscribe', feed: 'book', product_ids: ['PF_XBTUSD'] }, { event: 'subscribe', feed: 'trade', product_ids: ['PF_XBTUSD'] }]);
+  assert.deepEqual(sent.krakenspot, [{ method: 'subscribe', params: { channel: 'book', symbol: ['BTC/USD'], depth: 1000, snapshot: true } }, { method: 'subscribe', params: { channel: 'trade', symbol: ['BTC/USD'] } }]);
   assert.deepEqual(sent.coinbase, [{ type: 'subscribe', product_ids: ['BTC-USD'], channels: ['level2_batch', 'matches'] }]);
   assert.deepEqual(sent.okxspot, [{ op: 'subscribe', args: [{ channel: 'books', instId: 'BTC-USDT' }, { channel: 'trades', instId: 'BTC-USDT' }] }]);
   assert.equal((made[2]!.book as OkxConnector).contract, 0.01);

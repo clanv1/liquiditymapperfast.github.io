@@ -21,7 +21,8 @@ test('picks are exchanges and kinds, never ids: the same picks give BTC\'s marke
 test('the picker lists one row per exchange and kind, perpetuals of OI venues only for open interest, and keeps a pick this coin lacks', () => {
   const rows = pickOptions(state(ETH), null, ['coinbase/spot'], false);
   assert.deepEqual(rows.map(r => [r.pick, r.id]), [['binance/perp', 'binance:ETHUSDT'], ['binance/spot', 'binance:ETHUSDT:spot'], ['bybit/perp', 'bybit:ETHUSDT'], ['okx/perp', 'okx:ETH-USDT-SWAP'], ['coinbase/spot', null]]);
-  assert.deepEqual(pickOptions(state(BTC), null, [], true).map(r => r.pick), ['binance/perp', 'bybit/perp', 'deribit/perp', 'okx/perp'], 'no spot, no MEXC (its open interest is not read)');
+  assert.deepEqual(pickOptions(state(BTC), null, [], true).map(r => r.pick), ['binance/perp', 'bybit/perp', 'coinbase/perp', 'okx/perp'], 'Deribit is Coinbase\'s perpetual; no spot, no MEXC');
+  assert.equal(pickOptions(state(BTC), null, [], true).find(r => r.pick === 'coinbase/perp')!.id, 'deribit:BTC-PERPETUAL');
   assert.deepEqual(resolvePicks(state(BTC), null, ['binance/spot', 'mexc/perp', 'okx/perp'], true), ['okx:BTC-USDT-SWAP']);
 });
 
@@ -34,7 +35,8 @@ test('custom open interest: the picked perpetuals whatever the chips and the fil
 });
 
 test('saved lists are checked: the right form only, each once, at most the limit; layouts and pages read them the same way', () => {
-  assert.deepEqual(readPicks(['binance/perp', 'binance/perp', 'binance:BTCUSDT', 7, 'okx/spot', 'x/y'], false), ['binance/perp', 'okx/spot']);
+  assert.deepEqual(readPicks(['binance/perp', 'binance/perp', 'binance:BTCUSDT', 7, 'okx/spot', 'x/y', 'deribit/perp'], false), ['binance/perp', 'okx/spot', 'coinbase/perp']);
+  assert.deepEqual(readPicks(['deribit/perp', 'okx/perp'], true), ['coinbase/perp', 'okx/perp'], 'a Deribit pick saved earlier is Coinbase\'s perpetual');
   assert.deepEqual(readPicks(['binance/spot', 'mexc/perp', 'okx/perp'], true), ['okx/perp']);
   assert.equal(readPicks(Array.from({ length: 80 }, (_, i) => `v${i}/perp`), false).length, MAX_PICKS);
   assert.deepEqual(readCustomMarkets('junk'), { footprint: [], oi: [] });

@@ -56,7 +56,8 @@ const bounded = (value: unknown, min: number, max: number, fallback: number): nu
 
 /** The pinned list: strings only, no repeats, no more than `MAX_PINNED`. A save from before the list existed had one switch, for Hyperliquid. */
 function readPinned(s: Record<string, unknown>): string[] {
-  if (Array.isArray(s.pinned)) return [...new Set(s.pinned.filter((k): k is string => typeof k === 'string' && k.length > 0 && k.length <= 40))].slice(0, MAX_PINNED);
+  // A pin on Deribit from before it was grouped with Coinbase still holds that row.
+  if (Array.isArray(s.pinned)) return [...new Set(s.pinned.filter((k): k is string => typeof k === 'string' && k.length > 0 && k.length <= 40).map(k => k === 'deribit' ? 'coinbase' : k))].slice(0, MAX_PINNED);
   return s.pinHyperliquid === true ? ['hyperliquid'] : [];
 }
 

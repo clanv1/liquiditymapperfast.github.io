@@ -123,6 +123,17 @@ const SPECS: Readonly<Record<string, CandleSpec>> = {
     page: async (i, ms, end, get, symbol, limit = 1000) => list(await get('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type: 'candleSnapshot', req: { coin: symbol, interval: i, startTime: end - (limit - 1) * ms, endTime: end } }) }))
       .map(r => row(at(r, 't'), at(r, 'o'), at(r, 'h'), at(r, 'l'), at(r, 'c'), at(r, 'v'))),
   },
+  // Kraken spot OHLC echoes the page's origin. At most 720 bars, the latest after `since`; volume (column 6) is BTC.
+  // [time in seconds, open, high, low, close, vwap, volume, count]. The result's key is the pair's REST name, not the one we asked with.
+  krakenspot: {
+    intervals: { 60_000: '1', 300_000: '5', 900_000: '15', 1_800_000: '30', 3_600_000: '60', 14_400_000: '240', 86_400_000: '1440' }, limit: 720,
+    page: async (i, ms, end, get, symbol, limit = 720) => {
+      const since = Math.floor(end / 1000) - Math.max(1, limit - 1) * (ms / 1000);
+      const result = at(await get(`https://api.kraken.com/0/public/OHLC?pair=${encodeURIComponent(symbol)}&interval=${i}&since=${since}`), 'result');
+      const rows = result !== null && typeof result === 'object' ? Object.entries(result as Record<string, unknown>).find(([key, value]) => key !== 'last' && Array.isArray(value))?.[1] : [];
+      return list(rows).map(r => row(num(at(r, 0)) * 1000, at(r, 1), at(r, 2), at(r, 3), at(r, 4), at(r, 6)));
+    },
+  },
   // The spot pair's own name (`@142` for BTC) is the coin the candle snapshot asks for.
   hyperliquidspot: {
     intervals: { 60_000: '1m', 300_000: '5m', 900_000: '15m', 1_800_000: '30m', 3_600_000: '1h', 14_400_000: '4h', 86_400_000: '1d' }, limit: 1000,

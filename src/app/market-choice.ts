@@ -2,7 +2,7 @@ import type { AppState } from './store.ts';
 import type { FlowBook } from './flow-book.ts';
 import { flowIds, type MapState } from './cvd/ids.ts';
 import { aggregateIds } from './cvd/model.ts';
-import { buildFamilies, familyKey, venueOfInstrument } from './cvd/families.ts';
+import { buildFamilies, venueOfInstrument } from './cvd/families.ts';
 import { kindOf } from './scope.ts';
 import { MAX_PROFILE_INSTRUMENTS } from '../shared/footprint.ts';
 import { OI_SAMPLE_VENUES } from '../shared/history.ts';
@@ -27,13 +27,20 @@ export const MAX_PICKS = MAX_PROFILE_INSTRUMENTS;
 const PICK = /^([a-z0-9]{1,24})\/(spot|perp)$/;
 export const pickOf = (family: string, kind: MarketKind): string => `${family}/${kind}`;
 export function parsePick(pick: string): { family: string; kind: MarketKind } | null { const m = PICK.exec(pick); return m ? { family: m[1]!, kind: m[2] as MarketKind } : null; }
-/** Whether a pick can count for open interest: a perpetual on an exchange whose open interest is read. */
-export const oiPickable = (pick: string): boolean => { const p = parsePick(pick); return p !== null && p.kind === 'perp' && OI_SAMPLE_VENUES.includes(p.family); };
+/**
+ * Whether a pick can count for open interest: a perpetual on an exchange whose open interest is read. Coinbase's perpetual is Deribit's
+ * market (`familyKey`), and Deribit publishes open interest, so that lane counts.
+ */
+const OI_FAMILY = new Set<string>([...OI_SAMPLE_VENUES, 'coinbase']);
+export const oiPickable = (pick: string): boolean => { const p = parsePick(pick); return p !== null && p.kind === 'perp' && OI_FAMILY.has(p.family); };
+
+/** A pick saved when Deribit was its own exchange: that perpetual is Coinbase's now. */
+const savedPick = (pick: string): string => pick === 'deribit/perp' ? 'coinbase/perp' : pick;
 
 /** A saved list, checked: picks of the right form only (perpetuals of OI venues for `oi`), each once, at most `MAX_PICKS`. */
 export function readPicks(value: unknown, oi: boolean): string[] {
   if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter((p): p is string => typeof p === 'string' && (oi ? oiPickable(p) : parsePick(p) !== null)))].slice(0, MAX_PICKS);
+  return [...new Set(value.filter((p): p is string => typeof p === 'string').map(savedPick).filter(p => oi ? oiPickable(p) : parsePick(p) !== null))].slice(0, MAX_PICKS);
 }
 export function readCustomMarkets(value: unknown): CustomMarkets {
   const v = (value && typeof value === 'object' ? value : {}) as Partial<Record<keyof CustomMarkets, unknown>>;
@@ -76,7 +83,8 @@ export function resolvePicks(state: Pick<AppState, 'markets'>, flow: FlowBook | 
 
 /** The perpetuals the ALL VENUES lines count on an exchange whose open interest is read: the OI pane's markets with venues added together. */
 export function oiVenueIds(state: Pick<AppState, 'markets' | 'disabledVenues' | 'scope'> & MapState, flow: FlowBook): string[] {
-  return aggregateIds(flow, flowIds(state, flow.ids), id => kindOf(state.markets, id)).filter(id => kindOf(state.markets, id) === 'perp' && OI_SAMPLE_VENUES.includes(familyKey(venueOfInstrument(id)))).sort();
+  // The venue id, not the company (`familyKey` turns Deribit into Coinbase): open interest is read from Deribit's own feed.
+  return aggregateIds(flow, flowIds(state, flow.ids), id => kindOf(state.markets, id)).filter(id => kindOf(state.markets, id) === 'perp' && OI_SAMPLE_VENUES.includes(venueOfInstrument(id))).sort();
 }
 
 /**

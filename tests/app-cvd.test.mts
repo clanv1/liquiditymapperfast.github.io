@@ -8,16 +8,18 @@ import { FlowSeries } from '../src/shared/flow.ts';
 import { PriceTrack } from '../src/app/cvd/price.ts';
 import { defaultShow } from '../src/app/store.ts';
 
-const kinds: Record<string, 'spot' | 'perp'> = { 'binance:BTCUSDT': 'perp', 'binancespot:BTCUSDT': 'spot', 'coinbase:BTC-USD': 'spot', 'hyperliquid:BTC-PERP': 'perp', 'okx:BTC-USDT-SWAP': 'perp', 'okx:BTC-USDT': 'spot', 'okx:BTC-USD-SWAP': 'perp' };
+const kinds: Record<string, 'spot' | 'perp'> = { 'binance:BTCUSDT': 'perp', 'binancespot:BTCUSDT': 'spot', 'coinbase:BTC-USD': 'spot', 'deribit:BTC-PERPETUAL': 'perp', 'hyperliquid:BTC-PERP': 'perp', 'okx:BTC-USDT-SWAP': 'perp', 'okx:BTC-USDT': 'spot', 'okx:BTC-USD-SWAP': 'perp' };
 const kindOf = (id: string) => kinds[id] ?? null;
 
 test('a venue and its spot twin are one family, and a market of unknown kind counts as a perpetual', () => {
   assert.equal(familyKey('binancespot'), 'binance'); assert.equal(familyKey('binance'), 'binance'); assert.equal(familyKey('binanceus'), 'binanceus');
   assert.equal(familyKey('spot'), 'spot', 'a name that is only "spot" is not cut to nothing');
-  const families = buildFamilies(['binance:BTCUSDT', 'coinbase:BTC-USD', 'binancespot:BTCUSDT', 'mystery:X', 'okx:BTC-USDT-SWAP', 'okx:BTC-USDT', 'okx:BTC-USD-SWAP'], kindOf);
+  assert.equal(familyKey('deribit'), 'coinbase', 'Deribit is Coinbase\'s perpetual');
+  assert.equal(familyKey('krakenspot'), 'kraken');
+  const families = buildFamilies(['binance:BTCUSDT', 'coinbase:BTC-USD', 'deribit:BTC-PERPETUAL', 'binancespot:BTCUSDT', 'mystery:X', 'okx:BTC-USDT-SWAP', 'okx:BTC-USDT', 'okx:BTC-USD-SWAP'], kindOf);
   assert.deepEqual(families.map(f => [f.key, f.lanes.map(l => `${l.kind}:${l.id}`)]), [
     ['binance', ['perp:binance:BTCUSDT', 'spot:binancespot:BTCUSDT']],
-    ['coinbase', ['spot:coinbase:BTC-USD']],
+    ['coinbase', ['spot:coinbase:BTC-USD', 'perp:deribit:BTC-PERPETUAL']],
     ['mystery', ['perp:mystery:X']],
     ['okx', ['perp:okx:BTC-USDT-SWAP', 'spot:okx:BTC-USDT']],            // the second perpetual is not a second lane
   ]);

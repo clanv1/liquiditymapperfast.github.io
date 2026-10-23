@@ -27,12 +27,12 @@ const label = (key: string): string => key[0]!.toUpperCase() + key.slice(1);
 test('with the Spot filter on, the five exchanges that have no spot market are said to be hidden by it, and one click puts them back', () => {
   // Eight venues are on and flow is recorded for all of them; the column shows two rows: exactly what a person reported.
   const missing = explainMissing(state({ scope: 'spot' }), ids, new Set(['binance', 'coinbase']), busy);
-  assert.deepEqual(missing.map(m => [m.key, m.why]), [['hyperliquid', 'filter'], ['bybit', 'filter'], ['okx', 'filter'], ['deribit', 'filter'], ['bitget', 'filter']]);
+  assert.deepEqual(missing.map(m => [m.key, m.why]), [['hyperliquid', 'filter'], ['bybit', 'filter'], ['okx', 'filter'], ['bitget', 'filter']], 'Deribit is Coinbase\'s perpetual, and that row is on screen through the spot lane');
   const rows = noticeRows(missing, label, 'spot');
   assert.equal(rows.length, 1);
-  assert.equal(rows[0]!.text, 'Hidden by the Spot filter: Hyperliquid, Bybit, Okx, Deribit, Bitget.');
+  assert.equal(rows[0]!.text, 'Hidden by the Spot filter: Hyperliquid, Bybit, Okx, Bitget.');
   assert.deepEqual([rows[0]!.action?.label, rows[0]!.action?.run], ['Show both', { kind: 'both' }]);
-  assert.match(noticeRows(explainMissing(state({ scope: 'perp' }), ids, new Set(['hyperliquid', 'binance', 'bybit', 'okx', 'deribit', 'bitget']), busy), label, 'perp')[0]!.text, /^Hidden by the Perp filter: Coinbase\.$/, 'a perpetual filter leaves out the exchange that has only a spot market');
+  assert.deepEqual(explainMissing(state({ scope: 'perp' }), ids, new Set(['hyperliquid', 'binance', 'bybit', 'okx', 'bitget']), busy), [], 'Coinbase has Deribit\'s perpetual, so a perpetual filter does not hide it');
   assert.deepEqual(explainMissing(state(), ids, new Set(['hyperliquid', 'binance', 'bybit', 'okx', 'deribit', 'bitget', 'coinbase']), busy), [], 'nothing is missing when every exchange is a row');
 });
 
@@ -65,7 +65,8 @@ test('an exchange that has not traded in the ranking window is quiet, and with s
   // Reasons are listed in the order a person would act on them.
   const mixed = explainMissing(state({ scope: 'spot', disabledVenues: ['coinbase'] }), ids, new Set(['binance']), busy);
   const rows = noticeRows(mixed, label, 'spot');
-  assert.deepEqual(rows.map(r => r.action?.label), ['Show both', 'Turn on']);
+  // Coinbase's spot chip is off, and Deribit (its perpetual) is outside the Spot filter: the filter is the reason said first, and it is the only one.
+  assert.deepEqual(rows.map(r => r.action?.label), ['Show both']);
 });
 
 test('a long list of names is cut short in the line and whole in the tooltip', () => {

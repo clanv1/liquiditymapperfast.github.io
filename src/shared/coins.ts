@@ -15,9 +15,9 @@ export const COIN_VENUES = ['binance', 'binancespot', 'bybit', 'bybitspot', 'okx
 export type CoinVenue = (typeof COIN_VENUES)[number];
 /**
  * Markets that do not count towards a coin's place in the list. MEXC's books are not readable by a page. Hyperliquid spot is BTC's
- * UBTC/USDC pair only: no other coin is listed there.
+ * UBTC/USDC pair only, and Kraken's two markets are BTC's built-in pair and perpetual: no other coin is listed there.
  */
-export const OPTIONAL_VENUES = ['hyperliquidspot', 'mexc'] as const;
+export const OPTIONAL_VENUES = ['hyperliquidspot', 'kraken', 'krakenspot', 'mexc'] as const;
 export type MarketVenue = CoinVenue | (typeof OPTIONAL_VENUES)[number];
 
 /** How one market lists a coin. */
@@ -59,6 +59,8 @@ export const BTC: Coin = {
     // UBTC/USDC, the spot pair Hyperliquid names `@142` (the book and the trades subscribe with that name).
     hyperliquidspot: { symbol: '@142', unit: 1 },
     deribit: { symbol: 'BTC-PERPETUAL', unit: 1, inverse: true }, coinbase: { symbol: 'BTC-USD', unit: 1 },
+    // Kraken's linear perpetual (PF_XBTUSD, sized in BTC) and its spot pair. The spot id ends in "spot" so the two are one exchange.
+    kraken: { symbol: 'PF_XBTUSD', unit: 1 }, krakenspot: { symbol: 'BTC/USD', unit: 1 },
     // Contracts of 0.0001 BTC (MEXC's contract detail; a page cannot read it, so it is written here).
     mexc: { symbol: 'BTC_USDT', unit: 1, contract: 0.0001 },
   },
