@@ -1,7 +1,7 @@
 import { familyKey, venueOfInstrument } from './cvd/families.ts';
 
-/** How many venue chips the full top bar shows before the rest go into a menu: the eleven recommended venues all show (measured: they fit at 1366 px). */
-export const INLINE_CHIPS = 11;
+/** How many venue chips the full top bar shows before the rest go into a menu: the twelve recommended venues all show (eleven were measured to fit at 1366 px; Hyperliquid spot is the twelfth). */
+export const INLINE_CHIPS = 12;
 
 export interface ChipPlan { shown: string[]; more: string[] }
 

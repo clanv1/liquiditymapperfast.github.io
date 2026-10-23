@@ -133,6 +133,8 @@ test('the shipped coin list is a list, BTC first, every coin on nine markets or 
   assert.ok(shipped.coins.length > 100, `${shipped.coins.length} coins`);
   for (const c of shipped.coins.slice(1)) assert.ok(Object.keys(c.markets).length >= KEEP_MARKETS, c.coin);
   assert.equal(instrumentIdFor('hyperliquid', BTC), 'hyperliquid:BTC-PERP');
+  assert.equal(instrumentIdFor('hyperliquidspot', BTC), 'hyperliquidspot:@142', 'spot is BTC\'s built-in pair, not a coin the list discovers');
+  assert.ok(shipped.coins.every(c => c.coin === 'BTC' || c.markets.hyperliquidspot === undefined));
   assert.equal(instrumentIdFor('binance', shipped.coins.find(c => c.coin === 'PEPE')!), 'binance:1000PEPEUSDT');
 });
 

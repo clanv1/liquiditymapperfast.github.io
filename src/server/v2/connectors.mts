@@ -1,7 +1,7 @@
 import { inflateRawSync } from 'node:zlib';
 import { BinanceSpotConnector, BinanceUsConnector, BitunixConnector, BookConnector, HitbtcConnector, PoloniexConnector } from '../../shared/connector.ts';
 
-import { BitgetSpotConnector, BybitSpotConnector, OkxSpotConnector } from '../../shared/venues.ts';
+import { BitgetSpotConnector, BybitSpotConnector, HyperliquidSpotConnector, OkxSpotConnector } from '../../shared/venues.ts';
 export { BinanceSpotConnector, BinanceUsConnector, BitunixConnector, BookConnector, HitbtcConnector, PoloniexConnector, type ConnectorState, type ConnectorStatus } from '../../shared/connector.ts';
 
 /** BitMart spot depth50: deflate-compressed full snapshots. */
@@ -29,5 +29,6 @@ export const CONNECTOR_FACTORIES: Record<string, () => BookConnector> = {
   binanceus: () => new BinanceUsConnector(), binancespot: () => new BinanceSpotConnector(), hitbtc: () => new HitbtcConnector(), poloniex: () => new PoloniexConnector(),
   // The spot markets of exchanges whose perpetual the feed manager serves: these connectors carry their own trades.
   bybitspot: () => new BybitSpotConnector(), okxspot: () => new OkxSpotConnector(), bitgetspot: () => new BitgetSpotConnector(),
+  hyperliquidspot: () => new HyperliquidSpotConnector(),
   bitmart: () => new BitmartConnector(), bitunix: () => new BitunixConnector(),
 };

@@ -176,7 +176,7 @@ export const SECTIONS: readonly Section[] = [
   {
     id: 'venues', title: 'Exchanges, spot and perpetuals',
     blocks: [
-      { t: 'p', text: 'By default the map combines eleven markets: the perpetual futures of Binance, Bybit, OKX, Bitget, Hyperliquid and Deribit, and the spot markets of Binance, Coinbase, Bybit, OKX and Bitget. **Venues** switches any of them, or MEXC, on or off, and the choice is kept in your browser.' },
+      { t: 'p', text: 'By default the map combines twelve markets: the perpetual futures of Binance, Bybit, OKX, Bitget, Hyperliquid and Deribit, and the spot markets of Binance, Coinbase, Bybit, OKX, Bitget and Hyperliquid. **Venues** switches any of them, or MEXC, on or off, and the choice is kept in your browser.' },
       { t: 'list', items: [
         '**Spot / Perp / Both** filters what the liquidity views draw.',
         'The **chips** show or hide one exchange\'s contribution without stopping its feed. A chip that is dimmed is one the Spot / Perp filter is hiding: click it to show it. An exchange you chose that has no map gets a dashed chip that says why on hover.',
@@ -213,7 +213,7 @@ export const SECTIONS: readonly Section[] = [
         '**This is not advice**, and it places no orders. It is a way to look at what the order books are doing.',
         '**The map is not the whole market.** It shows the exchanges you switched on, and hidden or split orders are not visible.',
         '**A fresh page is shallow far from the price.** The far side fills in over some minutes.',
-        '**A phone only records while the page is open and awake.** A sleeping screen leaves a gap in the map; **Keep screen on** in Settings holds it awake. With all eleven markets the page reads about 200 to 300 MB an hour: on a mobile connection, switch some off in **Venues**.',
+        '**A phone only records while the page is open and awake.** A sleeping screen leaves a gap in the map; **Keep screen on** in Settings holds it awake. With all twelve markets the page reads about 200 to 300 MB an hour: on a mobile connection, switch some off in **Venues**.',
         '**Nothing leaves your machine.** The page talks to the exchanges and to nobody else. Recordings live in your browser; clearing the site\'s data erases them.',
         '**If something looks wrong**: check the connection status at the top right, try Recenter, and if hovering shows nothing, check the Mirror button.',
       ] },

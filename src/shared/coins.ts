@@ -14,8 +14,11 @@ export const EARLIER_BROWSER_VENUES: readonly string[] = ['binance', 'bybit', 'o
 /** The eleven markets, as the venue ids the browser uses. A coin is listed by how many of these list it. */
 export const COIN_VENUES = ['binance', 'binancespot', 'bybit', 'bybitspot', 'okx', 'okxspot', 'bitget', 'bitgetspot', 'hyperliquid', 'deribit', 'coinbase'] as const;
 export type CoinVenue = (typeof COIN_VENUES)[number];
-/** Markets a person can add that do not count towards a coin's place in the list (MEXC: its books and history are not readable by a page). */
-export const OPTIONAL_VENUES = ['mexc'] as const;
+/**
+ * Markets that do not count towards a coin's place in the list. MEXC's books are not readable by a page. Hyperliquid spot is BTC's
+ * UBTC/USDC pair only: no other coin is listed there.
+ */
+export const OPTIONAL_VENUES = ['hyperliquidspot', 'mexc'] as const;
 export type MarketVenue = CoinVenue | (typeof OPTIONAL_VENUES)[number];
 
 /** How one market lists a coin. */
@@ -53,7 +56,10 @@ export const BTC: Coin = {
     bybit: { symbol: 'BTCUSDT', unit: 1 }, bybitspot: { symbol: 'BTCUSDT', unit: 1 },
     okx: { symbol: 'BTC-USDT-SWAP', unit: 1, contract: 0.01 }, okxspot: { symbol: 'BTC-USDT', unit: 1 },
     bitget: { symbol: 'BTCUSDT', unit: 1 }, bitgetspot: { symbol: 'BTCUSDT', unit: 1 },
-    hyperliquid: { symbol: 'BTC', unit: 1 }, deribit: { symbol: 'BTC-PERPETUAL', unit: 1, inverse: true }, coinbase: { symbol: 'BTC-USD', unit: 1 },
+    hyperliquid: { symbol: 'BTC', unit: 1 },
+    // UBTC/USDC, the spot pair Hyperliquid names `@142` (the book and the trades subscribe with that name).
+    hyperliquidspot: { symbol: '@142', unit: 1 },
+    deribit: { symbol: 'BTC-PERPETUAL', unit: 1, inverse: true }, coinbase: { symbol: 'BTC-USD', unit: 1 },
     // Contracts of 0.0001 BTC (MEXC's contract detail; a page cannot read it, so it is written here).
     mexc: { symbol: 'BTC_USDT', unit: 1, contract: 0.0001 },
   },

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BROWSER_VENUES, BitgetConnector, BitgetSpotConnector, BybitSpotConnector, OkxConnector, OkxSpotConnector, restoreSelection } from '../src/shared/venues.ts';
+import { BROWSER_VENUES, BitgetConnector, BitgetSpotConnector, BybitSpotConnector, HyperliquidSpotConnector, OkxConnector, OkxSpotConnector, restoreSelection } from '../src/shared/venues.ts';
 import type { BookConnector, TradeEvent } from '../src/shared/connector.ts';
 import { fetchCandles } from '../src/shared/history.ts';
 import { FlowSources } from '../src/server/v2/flow-sources.mts';
@@ -63,9 +63,24 @@ test('a saved venue choice gains the recommended venues added since it was made,
 test('the server opens no second socket for the spot venues: their connector venues carry their own trades', () => {
   const sources = new FlowSources(() => {});
   try {
-    sources.sync(new Set(['bybitspot:BTCUSDT', 'okxspot:BTC-USDT', 'bitgetspot:BTCUSDT']));
+    sources.sync(new Set(['bybitspot:BTCUSDT', 'okxspot:BTC-USDT', 'bitgetspot:BTCUSDT', 'hyperliquidspot:@142']));
     assert.deepEqual(sources.active, []);
   } finally { sources.close(); }
+});
+
+test('Hyperliquid spot subscribes to the UBTC/USDC pair and ignores another coin on the same socket', () => {
+  const c = new HyperliquidSpotConnector();
+  assert.equal(c.instrumentId, 'hyperliquidspot:@142'); assert.equal(c.marketType, 'spot'); assert.equal(c.quote, 'USDC');
+  const sent: unknown[] = []; inside(c).open(p => sent.push(p));
+  assert.deepEqual(sent, [{ method: 'subscribe', subscription: { type: 'l2Book', coin: '@142' } }, { method: 'subscribe', subscription: { type: 'trades', coin: '@142' } }]);
+  const got = trades(c);
+  c.onMessage(msg({ channel: 'l2Book', data: { coin: 'BTC', levels: [[{ px: '1', sz: '1' }], [{ px: '2', sz: '1' }]] } }));
+  c.onMessage(msg({ channel: 'l2Book', data: { coin: '@142', levels: [[{ px: '80000', sz: '0.5', n: 1 }], [{ px: '80001', sz: '0.25', n: 1 }]] } }));
+  c.onMessage(msg({ channel: 'trades', data: [{ coin: '@142', side: 'A', px: '80000', sz: '0.1', time: 1700000000000, tid: 7, hash: '0xabc' }, { coin: 'BTC', side: 'B', px: '1', sz: '1', time: 1700000000000, tid: 8, hash: '0xdef' }] }));
+  assert.deepEqual(got.map(t => [t.instrumentId, t.side, t.notionalUsd, t.order]), [['hyperliquidspot:@142', 'sell', 8000, '0xabc']]);
+  const venue = BROWSER_VENUES.find(v => v.id === 'hyperliquidspot');
+  assert.equal(venue?.recommended, true); assert.equal(venue?.kind, 'spot');
+  assert.ok(RECOMMENDED_EXTRA_VENUES.includes('hyperliquidspot')); assert.equal(CONNECTOR_FACTORIES.hyperliquidspot!().marketType, 'spot');
 });
 
 test('spot candles: OKX spot volume is the coin column, and Bitget spot names its intervals its own way', async () => {
@@ -77,4 +92,6 @@ test('spot candles: OKX spot volume is the coin column, and Bitget spot names it
   assert.match(asked.find(u => u.includes('bitget')) ?? '', /spot\/market\/candles\?symbol=BTCUSDT&granularity=1min&/);
   await fetchCandles('bybitspot:BTCUSDT', 60_000, 0, 120_000, async url => { asked.push(url); return { result: { list: [] } }; });
   assert.match(asked.find(u => u.includes('bybit')) ?? '', /category=spot&symbol=BTCUSDT&interval=1&/);
+  await fetchCandles('hyperliquidspot:@142', 60_000, 0, 120_000, async (_url, init) => { asked.push(init?.body ?? ''); return [{ t: 60_000, o: '1', h: '2', l: '0.5', c: '1.5', v: '3' }]; });
+  assert.match(asked.at(-1) ?? '', /"coin":"@142"/);
 });

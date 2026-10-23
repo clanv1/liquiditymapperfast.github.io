@@ -452,6 +452,39 @@ export class HyperliquidConnector extends MarketBook {
   }
 }
 
+/**
+ * Hyperliquid spot, BTC only: UBTC/USDC, which the exchange names `@142`. The same socket as the perpetual. The book is the twenty
+ * levels the exchange sends at the real prices (the perpetual instead asks for bands). No other coin is listed here.
+ */
+export class HyperliquidSpotConnector extends MarketBook {
+  readonly id = 'hyperliquidspot'; readonly name = 'Hyperliquid spot'; readonly quote = 'USDC'; readonly marketType = 'spot' as const;
+  constructor(market: Market = btc('hyperliquidspot')) { super(market); }
+  protected url() { return 'wss://api.hyperliquid.xyz/ws'; }
+  protected open(send: (p: unknown) => void) {
+    send({ method: 'subscribe', subscription: { type: 'l2Book', coin: this.market.symbol } });
+    send({ method: 'subscribe', subscription: { type: 'trades', coin: this.market.symbol } });
+  }
+  override keepalive() { return { everyMs: 30_000, frame: () => ({ method: 'ping' }) }; }
+  onMessage(text: string) {
+    const m = this.record(JSON.parse(text)); if (!m) return;
+    if (m.channel === 'l2Book') {
+      const data = this.record(m.data); if (!data || data.coin !== this.market.symbol) return;
+      const levels = data.levels;
+      if (!Array.isArray(levels) || levels.length < 2) return;
+      const side = (rows: unknown): [number, number][] => Array.isArray(rows) ? rows.flatMap(r => { const d = this.record(r); return d ? [[num(d.px), num(d.sz)] as [number, number]] : []; }).filter(([p, q]) => p > 0 && q >= 0) : [];
+      this.replace(this.bids, side(levels[0])); this.replace(this.asks, side(levels[1])); this.touch(); return;
+    }
+    if (m.channel === 'trades') {
+      for (const item of Array.isArray(m.data) ? m.data : []) {
+        const d = this.record(item); if (!d || d.coin !== this.market.symbol) continue;
+        const price = num(d.px), amount = num(d.sz), t = num(d.time), side = d.side === 'B' ? 'buy' : d.side === 'A' ? 'sell' : null;
+        const order = typeof d.hash === 'string' && !/^0x0*$/i.test(d.hash) ? d.hash : undefined;
+        if (side && price > 0 && amount > 0 && Number.isFinite(t)) this.emitTrade({ tradeId: `${t}:${this.market.symbol}:${String(d.tid)}`, side, price, amount, notionalUsd: price * amount, t, ...(order ? { order } : {}) });
+      }
+    }
+  }
+}
+
 // ---- MEXC ---------------------------------------------------------------------------------------------------------------------------
 
 /**
@@ -533,6 +566,7 @@ const VENUE_SPECS: readonly (Omit<BrowserVenue, 'listed' | 'make'> & { id: Marke
   { id: 'okx', name: 'OKX', kind: 'perp', recommended: true, probe: { url: 'https://www.okx.com/api/v5/public/time' }, make: m => ({ book: new OkxConnector(m), feeds: [] }) },
   { id: 'bitget', name: 'Bitget', kind: 'perp', recommended: true, probe: { url: 'https://api.bitget.com/api/v2/public/time' }, make: m => ({ book: new BitgetConnector(m), feeds: [] }) },
   { id: 'hyperliquid', name: 'Hyperliquid', kind: 'perp', recommended: true, probe: { url: 'https://api.hyperliquid.xyz/info', init: { ...POST_JSON, body: JSON.stringify({ type: 'l2Book', coin: 'BTC' }) } }, make: m => ({ book: new HyperliquidConnector(m), feeds: [] }) },
+  { id: 'hyperliquidspot', name: 'Hyperliquid spot', kind: 'spot', recommended: true, probe: { url: 'https://api.hyperliquid.xyz/info', init: { ...POST_JSON, body: JSON.stringify({ type: 'spotMeta' }) } }, make: m => ({ book: new HyperliquidSpotConnector(m), feeds: [] }) },
   { id: 'deribit', name: 'Deribit', kind: 'perp', recommended: true, probe: { url: 'https://www.deribit.com/api/v2/public/get_time' }, make: m => ({ book: new DeribitConnector(m), feeds: [] }) },
   { id: 'binancespot', name: 'Binance spot', kind: 'spot', recommended: true, probe: { url: 'https://api.binance.com/api/v3/ping' }, make: m => ({ book: new BinanceSpotBook(m), feeds: [new BinanceSpotTrades(m)] }) },
   { id: 'coinbase', name: 'Coinbase', kind: 'spot', recommended: true, probe: { url: 'https://api.exchange.coinbase.com/time' }, make: m => ({ book: new CoinbaseConnector(m), feeds: [] }) },
@@ -544,7 +578,7 @@ const VENUE_SPECS: readonly (Omit<BrowserVenue, 'listed' | 'make'> & { id: Marke
   { id: 'mexc', name: 'MEXC', kind: 'perp', recommended: false, probe: null, make: m => ({ book: new MexcConnector(m), feeds: [] }) },
 ];
 
-/** The markets for one coin: every one of the eleven, each either listing it (and able to start) or not. */
+/** The markets for one coin: each one either listing it (and able to start) or not. Hyperliquid spot lists BTC only. */
 export function browserVenues(coin: Coin = BTC): BrowserVenue[] {
   return VENUE_SPECS.map(({ make, ...spec }) => {
     const listing = coin.markets[spec.id];

@@ -3,10 +3,11 @@ import type { BookConnector, TradeEvent } from '../../shared/connector.ts';
 import type { LiquidationEvent } from '../../shared/liquidations.ts';
 
 /**
- * Venues whose trades already arrive another way: the feed manager carries Binance's and Hyperliquid's, and the spot markets of Bybit, OKX
- * and Bitget are connector venues whose own sockets carry them. Running them here as well would open a second socket for the same trades.
+ * Venues whose trades already arrive another way: the feed manager carries Binance's and Hyperliquid's perpetual, and the spot markets of
+ * Bybit, OKX, Bitget and Hyperliquid are connector venues whose own sockets carry them. Running them here as well would open a second socket
+ * for the same trades.
  */
-const COVERED: ReadonlySet<string> = new Set(['binance', 'hyperliquid', 'bybitspot', 'okxspot', 'bitgetspot']);
+const COVERED: ReadonlySet<string> = new Set(['binance', 'hyperliquid', 'bybitspot', 'okxspot', 'bitgetspot', 'hyperliquidspot']);
 /** A venue that is no longer wanted keeps its trade socket this long, so a venue picked off and on again does not reconnect. */
 const GRACE_MS = 60_000;
 
