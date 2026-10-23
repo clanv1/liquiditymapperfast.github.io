@@ -3,11 +3,11 @@ import type { BookConnector, TradeEvent } from '../../shared/connector.ts';
 import type { LiquidationEvent } from '../../shared/liquidations.ts';
 
 /**
- * Venues whose trades already arrive another way: the feed manager carries Binance's and Hyperliquid's perpetual, and the spot markets of
- * Bybit, OKX, Bitget and Hyperliquid, plus Kraken's spot and perpetual, are connector venues whose own sockets carry them. Running them
- * here as well would open a second socket for the same trades.
+ * Venues whose trades already arrive another way: the feed manager carries Binance's and Hyperliquid's perpetual, and the connector venues
+ * carry their own (the spot markets of Bybit, OKX, Bitget and Hyperliquid, Kraken, and the nine exchanges added for coverage, each spot
+ * and perpetual). Running them here as well would open a second socket for the same trades.
  */
-const COVERED: ReadonlySet<string> = new Set(['binance', 'hyperliquid', 'bybitspot', 'okxspot', 'bitgetspot', 'hyperliquidspot', 'kraken', 'krakenspot']);
+const COVERED: ReadonlySet<string> = new Set(['binance', 'hyperliquid', 'bybitspot', 'okxspot', 'bitgetspot', 'hyperliquidspot', 'kraken', 'krakenspot', 'mexc', 'mexcspot', 'gateio', 'gateiospot', 'htx', 'htxspot', 'whitebit', 'whitebitspot', 'cryptocom', 'cryptocomspot', 'bingx', 'bingxspot', 'kucoin', 'kucoinspot', 'bitfinex', 'bitfinexspot', 'bitstamp', 'bitstampspot']);
 /** A venue that is no longer wanted keeps its trade socket this long, so a venue picked off and on again does not reconnect. */
 const GRACE_MS = 60_000;
 

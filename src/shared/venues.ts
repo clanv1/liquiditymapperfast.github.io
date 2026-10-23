@@ -1,5 +1,6 @@
 import { BinanceDiffDepthConnector, BookConnector, type Market } from './connector.ts';
 import { BTC, EARLIER_BROWSER_VENUES, type Coin, type MarketVenue } from './coins.ts';
+import { BingxPerpConnector, BingxSpotConnector, BitfinexPerpConnector, BitfinexSpotConnector, BitstampPerpConnector, BitstampSpotConnector, CryptocomPerpConnector, CryptocomSpotConnector, GatePerpConnector, GateSpotConnector, HtxPerpConnector, HtxSpotConnector, KucoinPerpConnector, KucoinSpotConnector, MexcSpotConnector, WhitebitPerpConnector, WhitebitSpotConnector } from './more-venues.ts';
 import { farSource } from './far-book.ts';
 import { hyperliquidBookStep, hyperliquidLevelBounds } from '../analytics/hyperliquid-bounds.mts';
 
@@ -715,9 +716,26 @@ const VENUE_SPECS: readonly (Omit<BrowserVenue, 'listed' | 'make'> & { id: Marke
   { id: 'okxspot', name: 'OKX spot', kind: 'spot', recommended: true, probe: { url: 'https://www.okx.com/api/v5/public/time' }, make: m => ({ book: new OkxSpotConnector(m), feeds: [] }) },
   { id: 'bitgetspot', name: 'Bitget spot', kind: 'spot', recommended: true, probe: { url: 'https://api.bitget.com/api/v2/public/time' }, make: m => ({ book: new BitgetSpotConnector(m), feeds: [] }) },
   { id: 'krakenspot', name: 'Kraken spot', kind: 'spot', recommended: true, probe: { url: 'https://api.kraken.com/0/public/SystemStatus' }, make: m => ({ book: new KrakenSpotConnector(m), feeds: [] }) },
-  // Optional (Research_Findings.md, 2026-10-08): large by volume and open interest, but a page gets only its best 20
-  // levels, and its resting book is several times heavier than its trading. Last, so the order of the others (and the reference price) is as it was.
-  { id: 'mexc', name: 'MEXC', kind: 'perp', recommended: false, probe: null, make: m => ({ book: new MexcConnector(m), feeds: [] }) },
+  // MEXC's perpetual is only its best 20 levels (its deep REST book is left out: it would dominate the map). It stays here, after the
+  // fourteen whose order the reference price follows, and the books below are the nine exchanges added for coverage.
+  { id: 'mexc', name: 'MEXC', kind: 'perp', recommended: true, probe: null, make: m => ({ book: new MexcConnector(m), feeds: [] }) },
+  { id: 'gateio', name: 'Gate.io', kind: 'perp', recommended: true, probe: null, make: m => ({ book: new GatePerpConnector(m), feeds: [] }) },
+  { id: 'gateiospot', name: 'Gate.io spot', kind: 'spot', recommended: true, probe: null, make: m => ({ book: new GateSpotConnector(m), feeds: [] }) },
+  { id: 'mexcspot', name: 'MEXC spot', kind: 'spot', recommended: true, probe: null, make: m => ({ book: new MexcSpotConnector(m), feeds: [] }) },
+  { id: 'htx', name: 'HTX', kind: 'perp', recommended: true, probe: null, make: m => ({ book: new HtxPerpConnector(m), feeds: [] }) },
+  { id: 'htxspot', name: 'HTX spot', kind: 'spot', recommended: true, probe: null, make: m => ({ book: new HtxSpotConnector(m), feeds: [] }) },
+  { id: 'whitebit', name: 'WhiteBIT', kind: 'perp', recommended: true, probe: null, make: m => ({ book: new WhitebitPerpConnector(m), feeds: [] }) },
+  { id: 'whitebitspot', name: 'WhiteBIT spot', kind: 'spot', recommended: true, probe: null, make: m => ({ book: new WhitebitSpotConnector(m), feeds: [] }) },
+  { id: 'cryptocom', name: 'Crypto.com', kind: 'perp', recommended: true, probe: null, make: m => ({ book: new CryptocomPerpConnector(m), feeds: [] }) },
+  { id: 'cryptocomspot', name: 'Crypto.com spot', kind: 'spot', recommended: true, probe: null, make: m => ({ book: new CryptocomSpotConnector(m), feeds: [] }) },
+  { id: 'bingx', name: 'BingX', kind: 'perp', recommended: true, probe: null, make: m => ({ book: new BingxPerpConnector(m), feeds: [] }) },
+  { id: 'bingxspot', name: 'BingX spot', kind: 'spot', recommended: true, probe: null, make: m => ({ book: new BingxSpotConnector(m), feeds: [] }) },
+  { id: 'kucoin', name: 'KuCoin', kind: 'perp', recommended: true, probe: null, make: m => ({ book: new KucoinPerpConnector(m), feeds: [] }) },
+  { id: 'kucoinspot', name: 'KuCoin spot', kind: 'spot', recommended: true, probe: null, make: m => ({ book: new KucoinSpotConnector(m), feeds: [] }) },
+  { id: 'bitfinex', name: 'Bitfinex', kind: 'perp', recommended: true, probe: null, make: m => ({ book: new BitfinexPerpConnector(m), feeds: [] }) },
+  { id: 'bitfinexspot', name: 'Bitfinex spot', kind: 'spot', recommended: true, probe: null, make: m => ({ book: new BitfinexSpotConnector(m), feeds: [] }) },
+  { id: 'bitstamp', name: 'Bitstamp', kind: 'perp', recommended: true, probe: null, make: m => ({ book: new BitstampPerpConnector(m), feeds: [] }) },
+  { id: 'bitstampspot', name: 'Bitstamp spot', kind: 'spot', recommended: true, probe: null, make: m => ({ book: new BitstampSpotConnector(m), feeds: [] }) },
 ];
 
 /** The markets for one coin: each one either listing it (and able to start) or not. Hyperliquid spot lists BTC only. */

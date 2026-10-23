@@ -14,6 +14,7 @@ export const VENUE_MARKS: Readonly<Record<string, MarkStyle>> = {
   aster: { bg: '#f2c69b', fg: '#24160a', text: 'AS' },
   binance: { bg: '#f0b90b', fg: '#1e2026', text: 'B' },
   binanceus: { bg: '#f0b90b', fg: '#1e2026', text: 'US' },
+  bingx: { bg: '#1239c7', fg: '#ffffff', text: 'BN' },
   bitfinex: { bg: '#0b1e2b', fg: '#16b157', text: 'BF' },
   bitget: { bg: '#00c2d4', fg: '#06232a', text: 'BG' },
   bitmart: { bg: '#22252e', fg: '#23c686', text: 'BM' },

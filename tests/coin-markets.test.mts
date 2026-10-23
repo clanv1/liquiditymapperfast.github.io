@@ -39,11 +39,14 @@ function frames(c: BookConnector): unknown[] { const sent: unknown[] = []; if (!
 
 test('BTC is read exactly as before: the same instruments, addresses and subscriptions', () => {
   const made = BROWSER_VENUES.map(v => v.make());
-  assert.deepEqual(made.map(m => m.book.instrumentId), ['binance:BTCUSDT', 'bybit:BTCUSDT', 'okx:BTC-USDT-SWAP', 'bitget:BTCUSDT', 'hyperliquid:BTC-PERP', 'hyperliquidspot:@142', 'deribit:BTC-PERPETUAL', 'kraken:PF_XBTUSD', 'binancespot:BTCUSDT', 'coinbase:BTC-USD', 'bybitspot:BTCUSDT', 'okxspot:BTC-USDT', 'bitgetspot:BTCUSDT', 'krakenspot:BTC/USD', 'mexc:BTC_USDT'], 'the fourteen, and MEXC after them');
+  assert.deepEqual(made.map(m => m.book.instrumentId), ['binance:BTCUSDT', 'bybit:BTCUSDT', 'okx:BTC-USDT-SWAP', 'bitget:BTCUSDT', 'hyperliquid:BTC-PERP', 'hyperliquidspot:@142', 'deribit:BTC-PERPETUAL', 'kraken:PF_XBTUSD', 'binancespot:BTCUSDT', 'coinbase:BTC-USD', 'bybitspot:BTCUSDT', 'okxspot:BTC-USDT', 'bitgetspot:BTCUSDT', 'krakenspot:BTC/USD', 'mexc:BTC_USDT', 'gateio:BTC_USDT', 'gateiospot:BTC_USDT', 'mexcspot:BTCUSDT', 'htx:BTC-USDT', 'htxspot:BTCUSDT', 'whitebit:BTC_PERP', 'whitebitspot:BTC_USDT', 'cryptocom:BTCUSD-PERP', 'cryptocomspot:BTC_USD', 'bingx:BTC-USDT', 'bingxspot:BTC-USDT', 'kucoin:XBTUSDTM', 'kucoinspot:BTC-USDT', 'bitfinex:tBTCF0:USTF0', 'bitfinexspot:tBTCUSD', 'bitstamp:btcusd-perp', 'bitstampspot:btcusd'], 'the fourteen, then MEXC, then the nine exchanges');
   assert.deepEqual(made.flatMap(m => [m.book, ...m.feeds]).map(c => inside(c).url()), [
     'wss://fstream.binance.com/public/ws/btcusdt@depth@100ms', 'wss://fstream.binance.com/market/ws/btcusdt@aggTrade', 'wss://stream.bybit.com/v5/public/linear', 'wss://ws.okx.com:8443/ws/v5/public',
     'wss://ws.bitget.com/v2/ws/public', 'wss://api.hyperliquid.xyz/ws', 'wss://api.hyperliquid.xyz/ws', 'wss://www.deribit.com/ws/api/v2', 'wss://futures.kraken.com/ws/v1', 'wss://stream.binance.com:9443/ws/btcusdt@depth@100ms', 'wss://stream.binance.com:9443/ws/btcusdt@aggTrade',
-    'wss://ws-feed.exchange.coinbase.com', 'wss://stream.bybit.com/v5/public/spot', 'wss://ws.okx.com:8443/ws/v5/public', 'wss://ws.bitget.com/v2/ws/public', 'wss://ws.kraken.com/v2', 'wss://contract.mexc.com/edge']);
+    'wss://ws-feed.exchange.coinbase.com', 'wss://stream.bybit.com/v5/public/spot', 'wss://ws.okx.com:8443/ws/v5/public', 'wss://ws.bitget.com/v2/ws/public', 'wss://ws.kraken.com/v2', 'wss://contract.mexc.com/edge',
+    'wss://fx-ws.gateio.ws/v4/ws/usdt', 'wss://api.gateio.ws/ws/v4/', 'wss://wbs-api.mexc.com/ws', 'wss://api.hbdm.com/linear-swap-ws', 'wss://api.huobi.pro/ws', 'wss://wss.whitebit.com/ws', 'wss://wss.whitebit.com/ws',
+    'wss://stream.crypto.com/exchange/v1/market', 'wss://stream.crypto.com/exchange/v1/market', 'wss://open-api-swap.bingx.com/swap-market', 'wss://open-api-ws.bingx.com/market', 'wss://x-push-futures.kucoin.com', 'wss://x-push-spot.kucoin.com',
+    'wss://api-pub.bitfinex.com/ws/2', 'wss://api-pub.bitfinex.com/ws/2', 'wss://ws.bitstamp.net/', 'wss://ws.bitstamp.net/']);
   const sent = Object.fromEntries(made.map(m => [m.book.id, frames(m.book)]));
   assert.deepEqual(sent.bybit, [{ op: 'subscribe', args: ['orderbook.1000.BTCUSDT', 'publicTrade.BTCUSDT', 'allLiquidation.BTCUSDT'] }], 'and its liquidations on the same socket');
   assert.deepEqual(made.flatMap(m => m.liquidations ?? []).map(c => inside(c).url()), ['wss://fstream.binance.com/market/stream?streams=btcusdt@forceOrder/btcusdt@markPrice@1s'], 'Binance liquidations on a socket of their own');
@@ -274,7 +277,7 @@ test('the order book steps and the size buckets follow the price', () => {
 });
 
 
-test('MEXC: the best 20 levels and trades on one socket, sizes in contracts of 0.0001 BTC, optional, and no probe a page cannot read', () => {
+test('MEXC: the best 20 levels and trades on one socket, sizes in contracts of 0.0001 BTC, and no probe a page cannot read', () => {
   const mexc = new MexcConnector(), got = trades(mexc);
   assert.equal(mexc.instrumentId, 'mexc:BTC_USDT');
   assert.deepEqual(frames(mexc), [{ method: 'sub.depth.full', param: { symbol: 'BTC_USDT', limit: 20 } }, { method: 'sub.deal', param: { symbol: 'BTC_USDT' } }]);
@@ -289,21 +292,20 @@ test('MEXC: the best 20 levels and trades on one socket, sizes in contracts of 0
   mexc.onMessage(msg({ channel: 'rs.error', data: 'symbol not exist' }));
   assert.equal(mexc.state, 'error');
   const venue = BROWSER_VENUES.find(v => v.id === 'mexc')!;
-  assert.equal(venue.recommended, false); assert.equal(venue.probe, null); assert.equal(venue.kind, 'perp');
-  assert.equal(BROWSER_VENUES[BROWSER_VENUES.length - 1]!.id, 'mexc', 'last: the reference price is taken in this order');
+  assert.equal(venue.recommended, true); assert.equal(venue.probe, null); assert.equal(venue.kind, 'perp');
+  assert.equal(BROWSER_VENUES[14]!.id, 'mexc', 'after the fourteen: the reference price is taken in this order');
+  assert.equal(BROWSER_VENUES.at(-1)!.id, 'bitstampspot');
   assert.equal(browserVenues(lit).find(v => v.id === 'mexc')!.listed, false, 'MEXC is BTC\'s built-in contract, not another coin\'s');
 });
 
-test('the server takes MEXC trades from this connector when it has the MEXC book the feed manager names the same way', () => {
+test('the server does not open a second MEXC socket: this connector already carries the trades', () => {
   const request = buildMexcSubscription('depth', { symbol: 'BTC_USDT', limit: 20 });
   assert.equal(`mexc:${String(request.symbol).toUpperCase()}`, new MexcConnector().instrumentId, 'the feed manager\'s instrument id');
   const started: string[] = [];
   const venues: BrowserVenue[] = [{ ...BROWSER_VENUES.find(v => v.id === 'mexc')!, make: () => { const book = new MexcConnector(); book.start = () => { started.push(book.instrumentId); }; return { book, feeds: [] }; } }];
   const sources = new FlowSources(() => {}, () => 0, venues);
-  sources.sync(new Set(['binance:BTCUSDT']));
-  assert.deepEqual(started, [], 'no MEXC book on the server: no MEXC trades');
   sources.sync(new Set(['mexc:BTC_USDT']));
-  assert.deepEqual(started, ['mexc:BTC_USDT']);
+  assert.deepEqual(started, []);
 });
 
 test('a venue with no probe that never connects is reported as failing, never as refusing this country', () => {

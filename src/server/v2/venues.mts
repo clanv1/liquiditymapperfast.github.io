@@ -14,10 +14,11 @@ const EARLIER_VENUES = ['binanceus', 'hitbtc', 'poloniex', 'bitmart', 'bitunix']
 
 /**
  * The connector venues a first run starts: the spot markets of Binance, Bybit, OKX, Bitget and Hyperliquid, Kraken's spot and its
- * perpetual, large and with clean feeds (`Research_Findings.md`). The other connectors are small, so they wait in the Venues picker. An
- * install whose saved choice predates one of these starts it once (see `known` below).
+ * perpetual, and the nine exchanges added for coverage (Gate, MEXC, HTX, WhiteBIT, Crypto.com, BingX, KuCoin, Bitfinex, Bitstamp), each
+ * with its spot book and its perpetual. The other connectors are small, so they wait in the Venues picker. An install whose saved choice
+ * predates one of these starts it once (see `known` below).
  */
-export const RECOMMENDED_EXTRA_VENUES: readonly string[] = ['binancespot', 'bybitspot', 'okxspot', 'bitgetspot', 'hyperliquidspot', 'kraken', 'krakenspot'];
+export const RECOMMENDED_EXTRA_VENUES: readonly string[] = ['binancespot', 'bybitspot', 'okxspot', 'bitgetspot', 'hyperliquidspot', 'kraken', 'krakenspot', 'mexc', 'mexcspot', 'gateio', 'gateiospot', 'htx', 'htxspot', 'whitebit', 'whitebitspot', 'cryptocom', 'cryptocomspot', 'bingx', 'bingxspot', 'kucoin', 'kucoinspot', 'bitfinex', 'bitfinexspot', 'bitstamp', 'bitstampspot'];
 
 /** Venues served by self-contained connectors (the exchanges the feed manager does not cover). Enablement is persisted. */
 export class ExtraVenues {

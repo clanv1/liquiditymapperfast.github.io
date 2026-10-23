@@ -14,10 +14,10 @@ export const EARLIER_BROWSER_VENUES: readonly string[] = ['binance', 'bybit', 'o
 export const COIN_VENUES = ['binance', 'binancespot', 'bybit', 'bybitspot', 'okx', 'okxspot', 'bitget', 'bitgetspot', 'hyperliquid', 'deribit', 'coinbase'] as const;
 export type CoinVenue = (typeof COIN_VENUES)[number];
 /**
- * Markets that do not count towards a coin's place in the list. MEXC's books are not readable by a page. Hyperliquid spot is BTC's
- * UBTC/USDC pair only, and Kraken's two markets are BTC's built-in pair and perpetual: no other coin is listed there.
+ * Markets that do not count towards a coin's place in the list. They are BTC's built-in books: Hyperliquid spot, Kraken, and the nine
+ * exchanges added for coverage (each with its spot market and its perpetual). No other coin is listed there.
  */
-export const OPTIONAL_VENUES = ['hyperliquidspot', 'kraken', 'krakenspot', 'mexc'] as const;
+export const OPTIONAL_VENUES = ['hyperliquidspot', 'kraken', 'krakenspot', 'mexc', 'mexcspot', 'gateio', 'gateiospot', 'htx', 'htxspot', 'whitebit', 'whitebitspot', 'cryptocom', 'cryptocomspot', 'bingx', 'bingxspot', 'kucoin', 'kucoinspot', 'bitfinex', 'bitfinexspot', 'bitstamp', 'bitstampspot'] as const;
 export type MarketVenue = CoinVenue | (typeof OPTIONAL_VENUES)[number];
 
 /** How one market lists a coin. */
@@ -61,8 +61,21 @@ export const BTC: Coin = {
     deribit: { symbol: 'BTC-PERPETUAL', unit: 1, inverse: true }, coinbase: { symbol: 'BTC-USD', unit: 1 },
     // Kraken's linear perpetual (PF_XBTUSD, sized in BTC) and its spot pair. The spot id ends in "spot" so the two are one exchange.
     kraken: { symbol: 'PF_XBTUSD', unit: 1 }, krakenspot: { symbol: 'BTC/USD', unit: 1 },
-    // Contracts of 0.0001 BTC (MEXC's contract detail; a page cannot read it, so it is written here).
-    mexc: { symbol: 'BTC_USDT', unit: 1, contract: 0.0001 },
+    // Contracts of 0.0001 BTC (MEXC's contract detail; a page cannot read it, so it is written here). Spot sizes are coins.
+    mexc: { symbol: 'BTC_USDT', unit: 1, contract: 0.0001 }, mexcspot: { symbol: 'BTCUSDT', unit: 1 },
+    // Gate's perpetual is contracts of 0.0001 BTC (quanto_multiplier); the spot book is coins.
+    gateio: { symbol: 'BTC_USDT', unit: 1, contract: 0.0001 }, gateiospot: { symbol: 'BTC_USDT', unit: 1 },
+    // HTX's linear perpetual is contracts of 0.001 BTC; the spot book is coins (the channel lowercases the name).
+    htx: { symbol: 'BTC-USDT', unit: 1, contract: 0.001 }, htxspot: { symbol: 'BTCUSDT', unit: 1 },
+    whitebit: { symbol: 'BTC_PERP', unit: 1 }, whitebitspot: { symbol: 'BTC_USDT', unit: 1 },
+    // Crypto.com quotes both in USD and sizes both in coins.
+    cryptocom: { symbol: 'BTCUSD-PERP', unit: 1 }, cryptocomspot: { symbol: 'BTC_USD', unit: 1 },
+    bingx: { symbol: 'BTC-USDT', unit: 1 }, bingxspot: { symbol: 'BTC-USDT', unit: 1 },
+    // KuCoin's perpetual is contracts of 0.001 BTC (XBTUSDTM); the spot book is coins.
+    kucoin: { symbol: 'XBTUSDTM', unit: 1, contract: 0.001 }, kucoinspot: { symbol: 'BTC-USDT', unit: 1 },
+    bitfinex: { symbol: 'tBTCF0:USTF0', unit: 1 }, bitfinexspot: { symbol: 'tBTCUSD', unit: 1 },
+    // Bitstamp's channel keeps the hyphen (`order_book_btcusd-perp`); stripping it would subscribe to a pair that is not this market.
+    bitstamp: { symbol: 'btcusd-perp', unit: 1 }, bitstampspot: { symbol: 'btcusd', unit: 1 },
   },
 };
 
