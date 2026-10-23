@@ -298,7 +298,8 @@ export function buildCatalogue(lists: Partial<Record<CoinVenue, ListRow[] | null
 
 function parseListing(value: unknown): Listing | null {
   const symbol = at(value, 'symbol'), unit = num(at(value, 'unit')), contract = at(value, 'contract'), inverse = at(value, 'inverse');
-  if (typeof symbol !== 'string' || !/^[A-Za-z0-9_\-]{1,40}$/.test(symbol) || !(unit > 0)) return null;
+  // Hyperliquid spot names its pair `@142` or `PURR/USDC`. A space or any other mark is still not a listing.
+  if (typeof symbol !== 'string' || !/^[A-Za-z0-9_@/-]{1,40}$/.test(symbol) || !(unit > 0)) return null;
   if (contract !== undefined && !(num(contract) > 0)) return null;
   return { symbol, unit, ...(contract !== undefined ? { contract: num(contract) } : {}), ...(inverse === true ? { inverse: true } : {}) };
 }

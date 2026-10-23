@@ -126,6 +126,14 @@ test('a list read from JSON drops what it cannot use and keeps the rest', () => 
   assert.deepEqual(Object.keys(c.coins[2]!.markets), ['okx'], 'a malformed listing is left out of its coin');
   assert.deepEqual(c.lists, { binance: NOW });
   assert.deepEqual(ONLY_BTC.coins, [BTC]);
+  const spot = parseCatalogue({ version: 1, coins: [
+    { coin: 'HYPE', markets: { hyperliquidspot: { symbol: '@107', unit: 1 } }, tier: 1, volumeUsd: 1, price: 40 },
+    { coin: 'PURR', markets: { hyperliquidspot: { symbol: 'PURR/USDC', unit: 1 } }, tier: 1, volumeUsd: 1, price: 0.1 },
+    { coin: 'BAD', markets: { hyperliquidspot: { symbol: '@142;drop', unit: 1 } }, tier: 1, volumeUsd: 1, price: 1 },
+  ] })!;
+  assert.equal(spot.coins.find(x => x.coin === 'HYPE')!.markets.hyperliquidspot!.symbol, '@107');
+  assert.equal(spot.coins.find(x => x.coin === 'PURR')!.markets.hyperliquidspot!.symbol, 'PURR/USDC');
+  assert.equal(spot.coins.find(x => x.coin === 'BAD'), undefined, 'a pair name with another mark is dropped, and a coin with nothing left is left out');
 });
 
 test('every market is asked once and a failing one is null', async () => {
