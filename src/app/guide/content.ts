@@ -176,13 +176,13 @@ export const SECTIONS: readonly Section[] = [
   {
     id: 'venues', title: 'Exchanges, spot and perpetuals',
     blocks: [
-      { t: 'p', text: 'By default the map combines twelve markets: the perpetual futures of Binance, Bybit, OKX, Bitget, Hyperliquid and Deribit, and the spot markets of Binance, Coinbase, Bybit, OKX, Bitget and Hyperliquid. **Venues** switches any of them, or MEXC, on or off, and the choice is kept in your browser.' },
+      { t: 'p', text: 'By default the map combines thirty-two markets: the perpetual futures and the spot markets of Binance, Bybit, OKX, Bitget, Hyperliquid, Kraken, Coinbase, Gate.io, MEXC, HTX, WhiteBIT, Crypto.com, BingX, KuCoin, Bitfinex and Bitstamp. Coinbase\'s perpetual is the Deribit market: the two belong to one company, so they are one exchange here. **Venues** switches any of them on or off, and the choice is kept in your browser.' },
       { t: 'list', items: [
         '**Spot / Perp / Both** filters what the liquidity views draw.',
         'The **chips** show or hide one exchange\'s contribution without stopping its feed. A chip that is dimmed is one the Spot / Perp filter is hiding: click it to show it. An exchange you chose that has no map gets a dashed chip that says why on hover.',
         'The **Heatmap** selector shows a single exchange\'s own map instead of the combined one.',
         'The **market** selector chooses whose candles, footprint and open interest the chart uses.',
-        '**Coin** switches to another coin on nine or more of these markets; the page reloads.',
+        '**Coin** is Bitcoin. The page does not switch coins.',
       ] },
       { t: 'p', text: 'Some exchanges refuse some countries. If one never connects while the others work, its chip becomes a dashed tag and a banner says it is **unavailable from your location**. A VPN set to another country may enable it; the rest keep working either way.' },
     ],
@@ -213,7 +213,7 @@ export const SECTIONS: readonly Section[] = [
         '**This is not advice**, and it places no orders. It is a way to look at what the order books are doing.',
         '**The map is not the whole market.** It shows the exchanges you switched on, and hidden or split orders are not visible.',
         '**A fresh page is shallow far from the price.** The far side fills in over some minutes.',
-        '**A phone only records while the page is open and awake.** A sleeping screen leaves a gap in the map; **Keep screen on** in Settings holds it awake. With all twelve markets the page reads about 200 to 300 MB an hour: on a mobile connection, switch some off in **Venues**.',
+        '**A phone only records while the page is open and awake.** A sleeping screen leaves a gap in the map; **Keep screen on** in Settings holds it awake. With every market on, the page reads more than with a few: on a mobile connection, switch some off in **Venues**.',
         '**Nothing leaves your machine.** The page talks to the exchanges and to nobody else. Recordings live in your browser; clearing the site\'s data erases them.',
         '**If something looks wrong**: check the connection status at the top right, try Recenter, and if hovering shows nothing, check the Mirror button.',
       ] },

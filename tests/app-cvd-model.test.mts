@@ -168,6 +168,7 @@ test('settings read from storage field by field and never come out invalid', () 
   assert.equal(readCvd({ bursts: true }).bursts, true); assert.equal(readCvd({ bursts: 1 }).bursts, false, 'the burst marks are off unless switched on');
   assert.deepEqual(readCvd({ pinHyperliquid: true }).pinned, ['hyperliquid'], 'a save from before the list kept Hyperliquid pinned');
   assert.deepEqual(readCvd({ pinHyperliquid: true, pinned: ['okx'] }).pinned, ['okx'], 'the list wins over the old switch');
+  assert.deepEqual(readCvd({ pinned: ['deribit', 'coinbase'] }).pinned, ['coinbase'], 'a pin on Deribit holds the Coinbase row');
   assert.deepEqual(readCvd({ pinned: 'okx' }).pinned, [], 'not a list');
   assert.equal(readCvd({ pinned: Array.from({ length: 80 }, (_, i) => `v${i}`) }).pinned.length, 32, 'bounded');
   assert.equal(readCvd({ top: 0 }).top, 0, 'zero means every exchange');

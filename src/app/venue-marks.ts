@@ -1,3 +1,4 @@
+import { familyKey } from './cvd/families.ts';
 import { venueLabel } from './venues.ts';
 
 /**
@@ -13,6 +14,7 @@ export const VENUE_MARKS: Readonly<Record<string, MarkStyle>> = {
   aster: { bg: '#f2c69b', fg: '#24160a', text: 'AS' },
   binance: { bg: '#f0b90b', fg: '#1e2026', text: 'B' },
   binanceus: { bg: '#f0b90b', fg: '#1e2026', text: 'US' },
+  bingx: { bg: '#1239c7', fg: '#ffffff', text: 'BN' },
   bitfinex: { bg: '#0b1e2b', fg: '#16b157', text: 'BF' },
   bitget: { bg: '#00c2d4', fg: '#06232a', text: 'BG' },
   bitmart: { bg: '#22252e', fg: '#23c686', text: 'BM' },
@@ -43,7 +45,7 @@ let marketsOf: () => readonly MarketLike[] = () => [];
 const spotSets = new WeakMap<readonly MarketLike[], ReadonlySet<string>>();
 export function useMarkets(source: () => readonly MarketLike[]): void { marketsOf = source; }
 /**
- * The instruments the market list says are spot, and the venues all of whose markets are (Coinbase, Kraken): most spot markets carry no
+ * The instruments the market list says are spot, and the venues all of whose markets are (Coinbase): most spot markets carry no
  * "spot" in their venue (`binance:BTCUSDT:spot`, `coinbase:BTC-USD`), so the alias alone missed them. Read from the list as it is now, so
  * whatever draws a mark first after the list changes already has it.
  */
@@ -65,8 +67,8 @@ function spotIds(): ReadonlySet<string> {
 
 /** The mark of an instrument or a venue (`binance:BTCUSDT`, `binancespot`, `binance`): its exchange's style, and whether it is a spot market. */
 export function markOf(id: string): MarkStyle & { spot: boolean; family: string } {
-  const venue = id.split(':')[0] ?? id, alias = venue.length > 4 && venue.endsWith('spot'), family = alias ? venue.slice(0, -4) : venue;
-  const spot = alias || spotIds().has(id);
+  const venue = id.split(':')[0] ?? id, family = familyKey(venue);
+  const spot = (venue.length > 4 && venue.endsWith('spot')) || spotIds().has(id);
   const known = VENUE_MARKS[family];
   if (known) return { ...known, spot, family };
   const name = venueLabel(family).replace(/[^A-Za-z0-9]/g, '');

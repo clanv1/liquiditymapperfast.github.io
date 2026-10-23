@@ -1,5 +1,6 @@
 import { BinanceDiffDepthConnector, BookConnector, type Market } from './connector.ts';
 import { BTC, EARLIER_BROWSER_VENUES, type Coin, type MarketVenue } from './coins.ts';
+import { BingxPerpConnector, BingxSpotConnector, BitfinexPerpConnector, BitfinexSpotConnector, BitstampPerpConnector, BitstampSpotConnector, CryptocomPerpConnector, CryptocomSpotConnector, GatePerpConnector, GateSpotConnector, HtxPerpConnector, HtxSpotConnector, KucoinPerpConnector, KucoinSpotConnector, MexcSpotConnector, WhitebitPerpConnector, WhitebitSpotConnector } from './more-venues.ts';
 import { farSource } from './far-book.ts';
 import { hyperliquidBookStep, hyperliquidLevelBounds } from '../analytics/hyperliquid-bounds.mts';
 
@@ -485,6 +486,146 @@ export class HyperliquidSpotConnector extends MarketBook {
   }
 }
 
+// ---- Kraken -------------------------------------------------------------------------------------------------------------------------
+
+/**
+ * Kraken spot, WebSocket v2: `book` at depth 1 000 (snapshot, then the levels that changed) and `trade` on the same socket. A level that
+ * falls out of the depth is not sent as a removal, so each side is kept best-first and cut to the depth, and Kraken's checksum of the top
+ * ten (asks then bids, the price and size text with the point removed) is what says the book is still the one they sent. The price and
+ * size have to stay the text from the frame: a number would drop a trailing zero and the checksum would never match. Sizes are BTC.
+ */
+const KRAKEN_BOOK_DEPTH = 1_000;
+interface KrakenLevel { price: string; qty: string; numericPrice: number; numericQty: number }
+const KRAKEN_CRC: readonly number[] = Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) value = (value & 1) ? (value >>> 1) ^ 0xEDB88320 : value >>> 1;
+  return value >>> 0;
+});
+const krakenCrc32 = (value: string): number => { let crc = 0xFFFFFFFF; for (const byte of new TextEncoder().encode(value)) crc = (crc >>> 8) ^ KRAKEN_CRC[(crc ^ byte) & 0xFF]!; return (crc ^ 0xFFFFFFFF) >>> 0; };
+const krakenPart = (value: string): string => value.replace('.', '').replace(/^0+/, '') || '0';
+const krakenChecksum = (bids: readonly KrakenLevel[], asks: readonly KrakenLevel[]): number => {
+  let text = '';
+  for (let i = 0; i < 10 && i < asks.length; i++) text += krakenPart(asks[i]!.price) + krakenPart(asks[i]!.qty);
+  for (let i = 0; i < 10 && i < bids.length; i++) text += krakenPart(bids[i]!.price) + krakenPart(bids[i]!.qty);
+  return krakenCrc32(text);
+};
+/** Where `price` is, or would go, in a side best first. */
+const krakenAt = (rows: readonly KrakenLevel[], price: number, descending: boolean): number => {
+  let lo = 0, hi = rows.length;
+  while (lo < hi) { const mid = (lo + hi) >>> 1, p = rows[mid]!.numericPrice; if (descending ? p > price : p < price) lo = mid + 1; else hi = mid; }
+  return lo;
+};
+/** Applies levels to a side best first (a quantity of 0 removes one), then cuts it to the subscribed depth. */
+const krakenApply = (rows: KrakenLevel[], changes: readonly KrakenLevel[], descending: boolean): void => {
+  for (const row of changes) {
+    const i = krakenAt(rows, row.numericPrice, descending), same = i < rows.length && rows[i]!.numericPrice === row.numericPrice;
+    if (row.numericQty === 0) { if (same) rows.splice(i, 1); }
+    else if (same) rows[i] = row;
+    else rows.splice(i, 0, row);
+  }
+  if (rows.length > KRAKEN_BOOK_DEPTH) rows.length = KRAKEN_BOOK_DEPTH;
+};
+/** Price and size stay the frame's own text (`JSON.parse` source), which the checksum is of. */
+const parseKrakenFrame = (text: string): unknown => JSON.parse(text, ((key: string, value: unknown, context?: { source?: unknown }) => (key === 'price' || key === 'qty') && typeof context?.source === 'string' ? context.source : value) as (key: string, value: unknown) => unknown);
+
+export class KrakenSpotConnector extends MarketBook {
+  readonly id = 'krakenspot'; readonly name = 'Kraken spot'; readonly quote = 'USD'; readonly marketType = 'spot' as const;
+  constructor(market: Market = btc('krakenspot')) { super(market); }
+  /** Each side, best first, cut to the depth: the book the checksum is of. */
+  #bids: KrakenLevel[] = []; #asks: KrakenLevel[] = []; #ready = false;
+  protected url() { return 'wss://ws.kraken.com/v2'; }
+  protected open(send: (p: unknown) => void) {
+    send({ method: 'subscribe', params: { channel: 'book', symbol: [this.symbol], depth: KRAKEN_BOOK_DEPTH, snapshot: true } });
+    send({ method: 'subscribe', params: { channel: 'trade', symbol: [this.symbol] } });
+  }
+  override keepalive() { return { everyMs: 30_000, frame: () => ({ method: 'ping' }) }; }
+  protected override reset() { super.reset(); this.#bids = []; this.#asks = []; this.#ready = false; }
+  #levels(rows: unknown): KrakenLevel[] {
+    if (!Array.isArray(rows)) throw new TypeError('Kraken book side is not a list');
+    return rows.map(row => {
+      const d = this.record(row), price = typeof d?.price === 'string' ? d.price : '', qty = typeof d?.qty === 'string' ? d.qty : '';
+      if (!/^\d+(?:\.\d+)?$/.test(price) || !/^\d+(?:\.\d+)?$/.test(qty)) throw new TypeError('Kraken book level is not text');
+      const numericPrice = Number(price), numericQty = Number(qty);
+      if (!(numericPrice > 0) || !(numericQty >= 0)) throw new TypeError('Kraken book level out of range');
+      return { price, qty, numericPrice, numericQty };
+    });
+  }
+  onMessage(text: string) {
+    const m = this.record(parseKrakenFrame(text)); if (!m) return;
+    if (m.channel === 'trade') {
+      for (const item of Array.isArray(m.data) ? m.data : []) {
+        const d = this.record(item); if (!d || d.symbol !== this.symbol) continue;
+        const price = num(d.price), amount = num(d.qty), t = iso(d.timestamp), side = d.side === 'buy' ? 'buy' : d.side === 'sell' ? 'sell' : null;
+        if (side && price > 0 && amount > 0 && Number.isFinite(t)) this.emitTrade({ tradeId: String(d.trade_id), side, price, amount, notionalUsd: price * amount, t });
+      }
+      return;
+    }
+    if (m.channel !== 'book') return;
+    const row = this.record(Array.isArray(m.data) ? m.data[0] : undefined); if (!row || row.symbol !== this.symbol) return;
+    if (m.type !== 'snapshot' && m.type !== 'update') return;
+    if (m.type === 'update' && !this.#ready) return;
+    const bids = this.#levels(row.bids ?? []), asks = this.#levels(row.asks ?? []);
+    if (m.type === 'snapshot') { this.#bids = []; this.#asks = []; }
+    krakenApply(this.#bids, bids, true); krakenApply(this.#asks, asks, false);
+    const checksum = num(row.checksum);
+    if (!Number.isSafeInteger(checksum) || checksum !== krakenChecksum(this.#bids, this.#asks)) { this.fail('Kraken checksum mismatch'); return; }
+    this.#ready = true;
+    this.replace(this.bids, this.#bids.map(level => [level.numericPrice, level.numericQty]));
+    this.replace(this.asks, this.#asks.map(level => [level.numericPrice, level.numericQty]));
+    this.touch();
+  }
+}
+
+/**
+ * Kraken's linear perpetual PF_XBTUSD (sized in BTC, not the inverse PI_XBTUSD). The book is the whole of it: a snapshot, then one level
+ * at a time chained on `seq` (a quantity of 0 removes one). `side` buy is the bid. The trades socket sends a snapshot of recent fills on
+ * subscribe (`trade_snapshot`); those already happened and are not counted again. The futures REST API sends no CORS header, so a page
+ * cannot probe it and reports a venue that never connects as failing rather than as refusing a country.
+ */
+export class KrakenPerpConnector extends MarketBook {
+  readonly id = 'kraken'; readonly name = 'Kraken'; readonly quote = 'USD'; readonly marketType = 'perpetual' as const;
+  constructor(market: Market = btc('kraken')) { super(market); }
+  /** The last sequence applied (-1: no snapshot yet). */
+  #seq = -1;
+  protected url() { return 'wss://futures.kraken.com/ws/v1'; }
+  protected open(send: (p: unknown) => void) {
+    send({ event: 'subscribe', feed: 'book', product_ids: [this.symbol] });
+    send({ event: 'subscribe', feed: 'trade', product_ids: [this.symbol] });
+  }
+  override keepalive() { return { everyMs: 30_000, frame: () => ({ event: 'ping' }) }; }
+  protected override reset() { super.reset(); this.#seq = -1; }
+  #side(rows: unknown): [number, number][] {
+    if (!Array.isArray(rows)) throw new TypeError('Kraken futures book side is not a list');
+    return rows.map(row => {
+      const d = this.record(row), price = num(d?.price), qty = num(d?.qty);
+      if (!(price > 0) || !(qty >= 0) || !Number.isFinite(qty)) throw new TypeError('Kraken futures book level');
+      return [price, qty];
+    });
+  }
+  onMessage(text: string) {
+    const m = this.record(JSON.parse(text)); if (!m || (m.product_id !== undefined && m.product_id !== this.symbol)) return;
+    if (m.feed === 'book_snapshot') {
+      const seq = num(m.seq);
+      if (!Number.isInteger(seq)) throw new TypeError('Kraken futures book without a sequence');
+      const bids = this.#side(m.bids), asks = this.#side(m.asks);
+      this.replace(this.bids, bids); this.replace(this.asks, asks); this.#seq = seq; this.touch(); return;
+    }
+    if (m.feed === 'book') {
+      const seq = num(m.seq);
+      if (this.#seq < 0 || seq <= this.#seq) return;
+      if (seq !== this.#seq + 1) { this.fail(`sequence gap ${this.#seq} -> ${seq}`); return; }
+      const side = m.side === 'buy' ? this.bids : m.side === 'sell' ? this.asks : null;
+      if (!side) throw new TypeError('Kraken futures book side');
+      const price = num(m.price), qty = num(m.qty);
+      if (!(price > 0) || !(qty >= 0) || !Number.isFinite(qty)) throw new TypeError('Kraken futures book level');
+      this.#seq = seq; if (qty > 0) side.set(price, qty); else side.delete(price); this.touch(); return;
+    }
+    if (m.feed !== 'trade') return;
+    const price = num(m.price), amount = num(m.qty), t = num(m.time), side = m.side === 'buy' ? 'buy' : m.side === 'sell' ? 'sell' : null;
+    if (side && price > 0 && amount > 0 && Number.isFinite(t) && m.uid !== undefined) this.emitTrade({ tradeId: String(m.uid), side, price, amount, notionalUsd: price * amount, t });
+  }
+}
+
 // ---- MEXC ---------------------------------------------------------------------------------------------------------------------------
 
 /**
@@ -568,14 +709,33 @@ const VENUE_SPECS: readonly (Omit<BrowserVenue, 'listed' | 'make'> & { id: Marke
   { id: 'hyperliquid', name: 'Hyperliquid', kind: 'perp', recommended: true, probe: { url: 'https://api.hyperliquid.xyz/info', init: { ...POST_JSON, body: JSON.stringify({ type: 'l2Book', coin: 'BTC' }) } }, make: m => ({ book: new HyperliquidConnector(m), feeds: [] }) },
   { id: 'hyperliquidspot', name: 'Hyperliquid spot', kind: 'spot', recommended: true, probe: { url: 'https://api.hyperliquid.xyz/info', init: { ...POST_JSON, body: JSON.stringify({ type: 'spotMeta' }) } }, make: m => ({ book: new HyperliquidSpotConnector(m), feeds: [] }) },
   { id: 'deribit', name: 'Deribit', kind: 'perp', recommended: true, probe: { url: 'https://www.deribit.com/api/v2/public/get_time' }, make: m => ({ book: new DeribitConnector(m), feeds: [] }) },
+  { id: 'kraken', name: 'Kraken', kind: 'perp', recommended: true, probe: null, make: m => ({ book: new KrakenPerpConnector(m), feeds: [] }) },
   { id: 'binancespot', name: 'Binance spot', kind: 'spot', recommended: true, probe: { url: 'https://api.binance.com/api/v3/ping' }, make: m => ({ book: new BinanceSpotBook(m), feeds: [new BinanceSpotTrades(m)] }) },
   { id: 'coinbase', name: 'Coinbase', kind: 'spot', recommended: true, probe: { url: 'https://api.exchange.coinbase.com/time' }, make: m => ({ book: new CoinbaseConnector(m), feeds: [] }) },
   { id: 'bybitspot', name: 'Bybit spot', kind: 'spot', recommended: true, probe: { url: 'https://api.bybit.com/v5/market/time' }, make: m => ({ book: new BybitSpotConnector(m), feeds: [] }) },
   { id: 'okxspot', name: 'OKX spot', kind: 'spot', recommended: true, probe: { url: 'https://www.okx.com/api/v5/public/time' }, make: m => ({ book: new OkxSpotConnector(m), feeds: [] }) },
   { id: 'bitgetspot', name: 'Bitget spot', kind: 'spot', recommended: true, probe: { url: 'https://api.bitget.com/api/v2/public/time' }, make: m => ({ book: new BitgetSpotConnector(m), feeds: [] }) },
-  // Optional (Research_Findings.md, 2026-10-08): large by volume and open interest, but a page gets only its best 20
-  // levels, and its resting book is several times heavier than its trading. Last, so the order of the others (and the reference price) is as it was.
-  { id: 'mexc', name: 'MEXC', kind: 'perp', recommended: false, probe: null, make: m => ({ book: new MexcConnector(m), feeds: [] }) },
+  { id: 'krakenspot', name: 'Kraken spot', kind: 'spot', recommended: true, probe: { url: 'https://api.kraken.com/0/public/SystemStatus' }, make: m => ({ book: new KrakenSpotConnector(m), feeds: [] }) },
+  // MEXC's perpetual is only its best 20 levels (its deep REST book is left out: it would dominate the map). It stays here, after the
+  // fourteen whose order the reference price follows, and the books below are the nine exchanges added for coverage.
+  { id: 'mexc', name: 'MEXC', kind: 'perp', recommended: true, probe: null, make: m => ({ book: new MexcConnector(m), feeds: [] }) },
+  { id: 'gateio', name: 'Gate.io', kind: 'perp', recommended: true, probe: null, make: m => ({ book: new GatePerpConnector(m), feeds: [] }) },
+  { id: 'gateiospot', name: 'Gate.io spot', kind: 'spot', recommended: true, probe: null, make: m => ({ book: new GateSpotConnector(m), feeds: [] }) },
+  { id: 'mexcspot', name: 'MEXC spot', kind: 'spot', recommended: true, probe: null, make: m => ({ book: new MexcSpotConnector(m), feeds: [] }) },
+  { id: 'htx', name: 'HTX', kind: 'perp', recommended: true, probe: null, make: m => ({ book: new HtxPerpConnector(m), feeds: [] }) },
+  { id: 'htxspot', name: 'HTX spot', kind: 'spot', recommended: true, probe: null, make: m => ({ book: new HtxSpotConnector(m), feeds: [] }) },
+  { id: 'whitebit', name: 'WhiteBIT', kind: 'perp', recommended: true, probe: null, make: m => ({ book: new WhitebitPerpConnector(m), feeds: [] }) },
+  { id: 'whitebitspot', name: 'WhiteBIT spot', kind: 'spot', recommended: true, probe: null, make: m => ({ book: new WhitebitSpotConnector(m), feeds: [] }) },
+  { id: 'cryptocom', name: 'Crypto.com', kind: 'perp', recommended: true, probe: null, make: m => ({ book: new CryptocomPerpConnector(m), feeds: [] }) },
+  { id: 'cryptocomspot', name: 'Crypto.com spot', kind: 'spot', recommended: true, probe: null, make: m => ({ book: new CryptocomSpotConnector(m), feeds: [] }) },
+  { id: 'bingx', name: 'BingX', kind: 'perp', recommended: true, probe: null, make: m => ({ book: new BingxPerpConnector(m), feeds: [] }) },
+  { id: 'bingxspot', name: 'BingX spot', kind: 'spot', recommended: true, probe: null, make: m => ({ book: new BingxSpotConnector(m), feeds: [] }) },
+  { id: 'kucoin', name: 'KuCoin', kind: 'perp', recommended: true, probe: null, make: m => ({ book: new KucoinPerpConnector(m), feeds: [] }) },
+  { id: 'kucoinspot', name: 'KuCoin spot', kind: 'spot', recommended: true, probe: null, make: m => ({ book: new KucoinSpotConnector(m), feeds: [] }) },
+  { id: 'bitfinex', name: 'Bitfinex', kind: 'perp', recommended: true, probe: null, make: m => ({ book: new BitfinexPerpConnector(m), feeds: [] }) },
+  { id: 'bitfinexspot', name: 'Bitfinex spot', kind: 'spot', recommended: true, probe: null, make: m => ({ book: new BitfinexSpotConnector(m), feeds: [] }) },
+  { id: 'bitstamp', name: 'Bitstamp', kind: 'perp', recommended: true, probe: null, make: m => ({ book: new BitstampPerpConnector(m), feeds: [] }) },
+  { id: 'bitstampspot', name: 'Bitstamp spot', kind: 'spot', recommended: true, probe: null, make: m => ({ book: new BitstampSpotConnector(m), feeds: [] }) },
 ];
 
 /** The markets for one coin: each one either listing it (and able to start) or not. Hyperliquid spot lists BTC only. */

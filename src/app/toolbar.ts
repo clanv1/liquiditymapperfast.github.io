@@ -96,8 +96,8 @@ function deck(id: string, title: string, ...rows: HTMLElement[][]): HTMLElement 
 /** Top bar: market, timeframe, layer, pane toggles, heatmap colour, venues, theme. */
 export class Toolbar {
   readonly root = el('header', { class: 'toolbar' });
-  /** The coin every view shows; choosing another loads the page again for it (app/coin.ts). */
-  #coin = el('button', { type: 'button', class: 'coin-btn', textContent: currentCoin().coin, ariaLabel: t('Coin'), tip: t('Coin: which coin every view shows. Choosing another loads the page again for it.'), onclick: () => { void lazy(() => import('./coin-dialog.ts')).then(m => m?.openCoinDialog()); } });
+  /** Bitcoin. The page does not switch coins (app/coin.ts). */
+  #coin = el('button', { type: 'button', class: 'coin-btn', textContent: currentCoin().coin, ariaLabel: t('Coin'), tip: t('Coin: every view shows Bitcoin.') });
   /** Says once why the page is on BTC when another coin was asked for. */
   #coinNotice = el('div', { class: 'notice info', role: 'status', hidden: true });
   #market = el('select', { class: 'market', ariaLabel: t('Market'), tip: t("Market: whose candles, footprint and open interest the chart shows. The heatmap always combines every enabled venue's book, whatever is chosen here.") });

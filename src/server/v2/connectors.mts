@@ -1,7 +1,8 @@
 import { inflateRawSync } from 'node:zlib';
 import { BinanceSpotConnector, BinanceUsConnector, BitunixConnector, BookConnector, HitbtcConnector, PoloniexConnector } from '../../shared/connector.ts';
 
-import { BitgetSpotConnector, BybitSpotConnector, HyperliquidSpotConnector, OkxSpotConnector } from '../../shared/venues.ts';
+import { BitfinexPerpConnector, BitfinexSpotConnector, BingxPerpConnector, BingxSpotConnector, BitstampPerpConnector, BitstampSpotConnector, CryptocomPerpConnector, CryptocomSpotConnector, GatePerpConnector, GateSpotConnector, HtxPerpConnector, HtxSpotConnector, KucoinPerpConnector, KucoinSpotConnector, MexcSpotConnector, WhitebitPerpConnector, WhitebitSpotConnector } from '../../shared/more-venues.ts';
+import { BitgetSpotConnector, BybitSpotConnector, HyperliquidSpotConnector, KrakenPerpConnector, KrakenSpotConnector, MexcConnector, OkxSpotConnector } from '../../shared/venues.ts';
 export { BinanceSpotConnector, BinanceUsConnector, BitunixConnector, BookConnector, HitbtcConnector, PoloniexConnector, type ConnectorState, type ConnectorStatus } from '../../shared/connector.ts';
 
 /** BitMart spot depth50: deflate-compressed full snapshots. */
@@ -30,5 +31,16 @@ export const CONNECTOR_FACTORIES: Record<string, () => BookConnector> = {
   // The spot markets of exchanges whose perpetual the feed manager serves: these connectors carry their own trades.
   bybitspot: () => new BybitSpotConnector(), okxspot: () => new OkxSpotConnector(), bitgetspot: () => new BitgetSpotConnector(),
   hyperliquidspot: () => new HyperliquidSpotConnector(),
+  kraken: () => new KrakenPerpConnector(), krakenspot: () => new KrakenSpotConnector(),
+  // The nine exchanges added for coverage. Each connector carries its own book and its trades, so the feed-manager adapters for the same names stay off.
+  mexc: () => new MexcConnector(), mexcspot: () => new MexcSpotConnector(),
+  gateio: () => new GatePerpConnector(), gateiospot: () => new GateSpotConnector(),
+  htx: () => new HtxPerpConnector(), htxspot: () => new HtxSpotConnector(),
+  whitebit: () => new WhitebitPerpConnector(), whitebitspot: () => new WhitebitSpotConnector(),
+  cryptocom: () => new CryptocomPerpConnector(), cryptocomspot: () => new CryptocomSpotConnector(),
+  bingx: () => new BingxPerpConnector(), bingxspot: () => new BingxSpotConnector(),
+  kucoin: () => new KucoinPerpConnector(), kucoinspot: () => new KucoinSpotConnector(),
+  bitfinex: () => new BitfinexPerpConnector(), bitfinexspot: () => new BitfinexSpotConnector(),
+  bitstamp: () => new BitstampPerpConnector(), bitstampspot: () => new BitstampSpotConnector(),
   bitmart: () => new BitmartConnector(), bitunix: () => new BitunixConnector(),
 };

@@ -5,8 +5,17 @@ export interface Lane { id: string; kind: Kind }
 /** An exchange: its spot and its perpetual market together, as one row of the column. */
 export interface Family { key: string; lanes: Lane[] }
 
+/**
+ * Venues of one company that the column, the venue menu and the range rows count as one exchange. Coinbase owns Deribit, so Deribit's
+ * perpetual is Coinbase's perp lane. The feeds stay two books (`deribit:BTC-PERPETUAL` and `coinbase:BTC-USD`).
+ */
+const COMPANY: Readonly<Record<string, string>> = { deribit: 'coinbase' };
+
 /** The exchange a venue belongs to: Binance spot is a venue of its own in the feeds but one row here ("binancespot" and "binance"). */
-export const familyKey = (venue: string): string => venue.length > 4 && venue.endsWith('spot') ? venue.slice(0, -4) : venue;
+export const familyKey = (venue: string): string => {
+  const own = venue.length > 4 && venue.endsWith('spot') ? venue.slice(0, -4) : venue;
+  return COMPANY[own] ?? own;
+};
 export const venueOfInstrument = (id: string): string => id.split(':')[0] ?? id;
 
 /**

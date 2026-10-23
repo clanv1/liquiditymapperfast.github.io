@@ -67,7 +67,7 @@ test('after a server restart, trades a venue sends again are counted nowhere a s
     const after = totals(run);
     assert.deepEqual(after.footprint, [[100, 60_000, 0], [101, 0, 40_000]], 'the burst once, the new trade once');
     assert.equal(after.flowBuy, 60_000); assert.equal(after.flowSell, 40_000);
-    const prints = run.v2.prints.query(from, to, 25_000, 100).map(p => [p.side, p.usd]);
+    const prints = run.v2.prints.query(from, to, 25_000, 5_000).filter(p => p.id === 'x:BTC').map(p => [p.side, p.usd]);
     assert.deepEqual(prints.filter(([side]) => side === 'buy'), [['buy', 60_000]], 'one bubble for the burst');
     const groups = (await run.v2.absorption.query(['x:BTC'], [25_000], from, to, 10, from)).groups.filter(g => g.side === 'buy');
     assert.deepEqual(groups.map(peakOf), [60_000], 'one absorption group for the burst');

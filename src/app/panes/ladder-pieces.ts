@@ -53,7 +53,7 @@ export function rankVenues(ids: readonly string[], total: (id: string) => number
  * missing here falls back to its first three letters.
  */
 export const VENUE_CODES: Readonly<Record<string, string>> = {
-  aster: 'AST', binance: 'BIN', binanceus: 'BUS', bitfinex: 'BFX', bitget: 'BGT', bitmart: 'BMT', bitmex: 'BMX', bitstamp: 'BST', bitunix: 'BTU',
+  aster: 'AST', binance: 'BIN', binanceus: 'BUS', bingx: 'BNX', bitfinex: 'BFX', bitget: 'BGT', bitmart: 'BMT', bitmex: 'BMX', bitstamp: 'BST', bitunix: 'BTU',
   bybit: 'BYB', coinbase: 'CB', cryptocom: 'CRO', deribit: 'DRB', dydx: 'DYD', gateio: 'GATE', hitbtc: 'HIT', htx: 'HTX', hyperliquid: 'HL', kraken: 'KRK',
   kucoin: 'KUC', mexc: 'MEXC', okx: 'OKX', phemex: 'PHX', poloniex: 'POL', whitebit: 'WBT',
 };

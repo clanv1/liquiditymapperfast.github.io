@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BROWSER_VENUES, BitgetConnector, BitgetSpotConnector, BybitSpotConnector, HyperliquidSpotConnector, OkxConnector, OkxSpotConnector, restoreSelection } from '../src/shared/venues.ts';
+import { BROWSER_VENUES, BitgetConnector, BitgetSpotConnector, BybitSpotConnector, HyperliquidSpotConnector, KrakenPerpConnector, KrakenSpotConnector, OkxConnector, OkxSpotConnector, restoreSelection } from '../src/shared/venues.ts';
+import { krakenBookChecksum } from '../src/adapters/kraken.mts';
 import type { BookConnector, TradeEvent } from '../src/shared/connector.ts';
 import { fetchCandles } from '../src/shared/history.ts';
 import { FlowSources } from '../src/server/v2/flow-sources.mts';
@@ -63,7 +64,7 @@ test('a saved venue choice gains the recommended venues added since it was made,
 test('the server opens no second socket for the spot venues: their connector venues carry their own trades', () => {
   const sources = new FlowSources(() => {});
   try {
-    sources.sync(new Set(['bybitspot:BTCUSDT', 'okxspot:BTC-USDT', 'bitgetspot:BTCUSDT', 'hyperliquidspot:@142']));
+    sources.sync(new Set(['bybitspot:BTCUSDT', 'okxspot:BTC-USDT', 'bitgetspot:BTCUSDT', 'hyperliquidspot:@142', 'kraken:PF_XBTUSD', 'krakenspot:BTC/USD']));
     assert.deepEqual(sources.active, []);
   } finally { sources.close(); }
 });
@@ -94,4 +95,56 @@ test('spot candles: OKX spot volume is the coin column, and Bitget spot names it
   assert.match(asked.find(u => u.includes('bybit')) ?? '', /category=spot&symbol=BTCUSDT&interval=1&/);
   await fetchCandles('hyperliquidspot:@142', 60_000, 0, 120_000, async (_url, init) => { asked.push(init?.body ?? ''); return [{ t: 60_000, o: '1', h: '2', l: '0.5', c: '1.5', v: '3' }]; });
   assert.match(asked.at(-1) ?? '', /"coin":"@142"/);
+  const kraken = await fetchCandles('krakenspot:BTC/USD', 60_000, 0, 120_000, async url => { asked.push(url); return { error: [], result: { 'BTC/USD': [[60, '1', '2', '0.5', '1.5', '1.2', '0.25', 3]], last: 60 } }; });
+  assert.equal(kraken[0]?.[5], 0.25, 'BTC, the volume column');
+  assert.match(asked.at(-1) ?? '', /pair=BTC%2FUSD&interval=1&since=/);
+});
+
+/** A Kraken spot book frame. `book` is the book after the frame (the checksum is of that, not of the changes alone). */
+function krakenBook(type: 'snapshot' | 'update', bids: [string, string][], asks: [string, string][], book: { bids: [string, string][]; asks: [string, string][] } = { bids, asks }): string {
+  const level = ([price, qty]: [string, string]) => ({ price, qty, numericPrice: Number(price), numericQty: Number(qty) });
+  const checksum = krakenBookChecksum({ bids: book.bids.map(level), asks: book.asks.map(level) });
+  const side = (rows: [string, string][]) => rows.map(([price, qty]) => `{"price":${price},"qty":${qty}}`).join(',');
+  return `{"channel":"book","type":"${type}","data":[{"symbol":"BTC/USD","bids":[${side(bids)}],"asks":[${side(asks)}],"checksum":${checksum}}]}`;
+}
+
+test('Kraken spot keeps the book by its checksum, and Kraken\'s perpetual chains on the sequence and skips the trade snapshot', () => {
+  const spot = new KrakenSpotConnector();
+  assert.equal(spot.instrumentId, 'krakenspot:BTC/USD'); assert.equal(spot.marketType, 'spot'); assert.equal(spot.quote, 'USD');
+  const got = trades(spot);
+  spot.state = 'connecting';
+  spot.onMessage(krakenBook('update', [['100', '1']], []));
+  assert.equal(spot.valued(Date.now()), null, 'an update before the snapshot is not a book');
+  spot.onMessage(krakenBook('snapshot', [['81621.2', '0.5'], ['81600.0', '1.25']], [['81621.3', '0.25']]));
+  const book = spot.valued(Date.now())!;
+  assert.equal(book.bids.lo[0], 81621.2); assert.equal(book.bids.usd[0], 81621.2 * 0.5);
+  assert.equal(book.asks.usd[0], 81621.3 * 0.25);
+  spot.onMessage(krakenBook('update', [['81621.2', '0']], [['81630.0', '2']], { bids: [['81600.0', '1.25']], asks: [['81621.3', '0.25'], ['81630.0', '2']] }));
+  const next = spot.valued(Date.now())!;
+  assert.equal(next.bids.lo[0], 81600); assert.equal(next.asks.lo[1], 81630);
+  spot.onMessage('{"channel":"trade","type":"update","data":[{"symbol":"BTC/USD","side":"sell","price":80000.0,"qty":0.1,"trade_id":9,"timestamp":"2026-10-23T13:21:33.764Z"},{"symbol":"ETH/USD","side":"buy","price":1,"qty":1,"trade_id":10,"timestamp":"2026-10-23T13:21:33.764Z"}]}');
+  assert.deepEqual(got.map(t => [t.instrumentId, t.side, t.amount, t.notionalUsd]), [['krakenspot:BTC/USD', 'sell', 0.1, 8000]]);
+  spot.onMessage(krakenBook('update', [['81600.0', '9']], [], { bids: [['81600.0', '9']], asks: [['81621.3', '0.25'], ['81630.0', '2']] }).replace(/"checksum":\d+/, '"checksum":1'));
+  assert.equal(spot.state, 'error'); assert.match(spot.lastError ?? '', /checksum/);
+
+  const perp = new KrakenPerpConnector(), perpTrades = trades(perp);
+  assert.equal(perp.instrumentId, 'kraken:PF_XBTUSD'); assert.equal(perp.marketType, 'perpetual');
+  assert.equal(BROWSER_VENUES.find(v => v.id === 'kraken')!.probe, null, 'the futures REST API cannot be read from a page');
+  perp.state = 'connecting';
+  perp.onMessage(msg({ feed: 'book', product_id: 'PF_XBTUSD', side: 'buy', seq: 2, price: 80_000, qty: 1 }));
+  assert.equal(perp.valued(Date.now()), null, 'no snapshot yet');
+  perp.onMessage(msg({ feed: 'book_snapshot', product_id: 'PF_XBTUSD', seq: 10, bids: [{ price: 80_000, qty: 0.5 }, { price: 79_000, qty: 1 }], asks: [{ price: 80_001, qty: 0.25 }, { price: 80_010, qty: 1 }] }));
+  perp.onMessage(msg({ feed: 'trade_snapshot', product_id: 'PF_XBTUSD', trades: [{ feed: 'trade', product_id: 'PF_XBTUSD', uid: 'old', side: 'buy', qty: 1, price: 80_000, time: 1 }] }));
+  perp.onMessage(msg({ feed: 'book', product_id: 'PF_XBTUSD', side: 'sell', seq: 11, price: 80_001, qty: 0 }));
+  perp.onMessage(msg({ feed: 'book', product_id: 'PI_XBTUSD', side: 'buy', seq: 12, price: 1, qty: 5 }));
+  perp.onMessage(msg({ feed: 'trade', product_id: 'PF_XBTUSD', uid: 'new', side: 'buy', type: 'fill', qty: 0.2, price: 80_000, time: 1_700_000_000_000 }));
+  const held = perp.valued(Date.now())!;
+  assert.deepEqual([...held.asks.lo], [80_010], 'the near ask was removed and the further one stays');
+  assert.equal(held.bids.usd[0], 80_000 * 0.5, 'a quantity is BTC');
+  assert.deepEqual(perpTrades.map(t => [t.tradeId, t.notionalUsd]), [['new', 16_000]], 'the snapshot of recent fills is not counted');
+  perp.onMessage(msg({ feed: 'book', product_id: 'PF_XBTUSD', side: 'buy', seq: 13, price: 70_000, qty: 1 }));
+  assert.equal(perp.state, 'error'); assert.match(perp.lastError ?? '', /sequence gap 11 -> 13/);
+  assert.ok(RECOMMENDED_EXTRA_VENUES.includes('kraken') && RECOMMENDED_EXTRA_VENUES.includes('krakenspot'));
+  assert.equal(CONNECTOR_FACTORIES.kraken!().marketType, 'perpetual');
+  assert.equal(CONNECTOR_FACTORIES.krakenspot!().instrumentId, 'krakenspot:BTC/USD');
 });

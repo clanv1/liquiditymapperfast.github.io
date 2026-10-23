@@ -11,14 +11,15 @@ test('a few venues all get a chip; many get a handful and a menu, and one over t
   assert.equal(chipPlan(names(INLINE_CHIPS + 1), INLINE_CHIPS).more.length, 0, '"+1" would save nothing');
   const many = chipPlan(names(20), INLINE_CHIPS);
   assert.deepEqual(many.shown, names(INLINE_CHIPS)); assert.equal(many.more.length, 20 - INLINE_CHIPS); assert.equal(many.more[0], `v${INLINE_CHIPS}`);
-  assert.equal(INLINE_CHIPS, 12, 'the twelve recommended venues all show');
+  assert.equal(INLINE_CHIPS, 14, 'fourteen chips in the bar; the rest go in the menu');
   assert.deepEqual(chipPlan(names(40), Infinity), { shown: names(40), more: [] }, 'the phone sheet has room for all');
   assert.deepEqual(chipPlan([], 8), { shown: [], more: [] });
 });
 
 test('the menu groups a venue with its spot twin and keeps the exchanges in the order they were met', () => {
-  assert.deepEqual(exchangeGroups(['hyperliquid', 'binance', 'okx', 'binancespot', 'coinbase', 'binanceus']), [
-    { key: 'hyperliquid', venues: ['hyperliquid'] }, { key: 'binance', venues: ['binance', 'binancespot'] }, { key: 'okx', venues: ['okx'] }, { key: 'coinbase', venues: ['coinbase'] }, { key: 'binanceus', venues: ['binanceus'] },
+  assert.deepEqual(exchangeGroups(['hyperliquid', 'binance', 'okx', 'binancespot', 'coinbase', 'deribit', 'binanceus', 'kraken', 'krakenspot']), [
+    { key: 'hyperliquid', venues: ['hyperliquid'] }, { key: 'binance', venues: ['binance', 'binancespot'] }, { key: 'okx', venues: ['okx'] },
+    { key: 'coinbase', venues: ['coinbase', 'deribit'] }, { key: 'binanceus', venues: ['binanceus'] }, { key: 'kraken', venues: ['kraken', 'krakenspot'] },
   ]);
 });
 

@@ -12,6 +12,8 @@ const contrast = (a: string, b: string): number => { const [hi, lo] = [luminance
 test('every exchange has a mark of its own: a spot market is its exchange\'s mark with a notch, an unknown one a plain mark from its name', () => {
   assert.deepEqual({ ...markOf('binance:BTCUSDT') }, { ...VENUE_MARKS.binance, spot: false, family: 'binance' });
   assert.deepEqual([markOf('binancespot:BTCUSDT').spot, markOf('binancespot:BTCUSDT').family, markOf('binancespot:BTCUSDT').text], [true, 'binance', 'B']);
+  assert.deepEqual([markOf('deribit:BTC-PERPETUAL').family, markOf('deribit:BTC-PERPETUAL').text, markOf('deribit').spot], ['coinbase', 'C', false], 'Deribit wears Coinbase\'s mark; the table still keeps Deribit\'s own');
+  assert.deepEqual([markOf('krakenspot:BTC/USD').family, markOf('krakenspot').spot, markOf('krakenspot').text, markOf('kraken').spot], ['kraken', true, 'K', false]);
   assert.deepEqual([markOf('okxspot').family, markOf('okx').spot], ['okx', false], 'a venue alone works too');
   const unknown = markOf('newdex:BTC-USD');
   assert.deepEqual([unknown.text, unknown.spot, unknown.family], ['NE', false, 'newdex']);

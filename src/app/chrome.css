@@ -103,8 +103,8 @@ dialog:focus-visible { outline: none; }
 :where([data-frame="editor"], [data-frame="paper"]) button:active:not(:disabled):not(.on) { background: color-mix(in srgb, var(--text) 12%, var(--face)); }
 /* A control that cannot be used is dimmed, of whatever kind (the bevel embosses its labels instead). */
 :where(:root:not([data-frame="bevel"])) :where(button, select, input):disabled { opacity: .45; cursor: default; }
-/* The two lists that scrolled with the browser's own bar (the coin list, the venue dialog) take the thin one the panels have (the bevel keeps its pixel bars). */
-:where(:root:not([data-frame="bevel"])) :is(.coin-list, dialog.venues) { scrollbar-width: thin; scrollbar-color: var(--edge) transparent; }
+/* The venue dialog scrolled with the browser's own bar: it takes the thin one the panels have (the bevel keeps its pixel bars). */
+:where(:root:not([data-frame="bevel"])) dialog.venues { scrollbar-width: thin; scrollbar-color: var(--edge) transparent; }
 input[type="number"], input[type="text"] { border: 1px solid var(--edge); border-radius: var(--radius); background: var(--well); color: var(--text); }
 .toolbar { background: var(--face); border-bottom-color: var(--edge); }
 .statusbar { background: var(--title); border-top-color: var(--edge); }
@@ -289,7 +289,7 @@ input[type="number"], input[type="text"] { border: 1px solid var(--edge); border
 :where([data-frame="bevel"]) .toolbar .deck { border: 2px solid; border-color: var(--bv-c-sunken); border-image: var(--bv-etched) 2 / 2px; box-shadow: none; padding: 0 3px 4px; }
 :where([data-frame="bevel"]) .toolbar .deck > legend { position: relative; padding: 0 3px; margin-left: -1px; background: transparent; font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--text); }
 /* A small triangle after a button's name is drawn, not typed. */
-:root[data-frame="bevel"] :is(.coin-btn, .theme-btn, .language-btn)::after {
+:root[data-frame="bevel"] :is(.theme-btn, .language-btn)::after {
   content: ""; display: inline-block; flex: none; width: 7px; height: 4px; border: 0; margin: 0 0 0 5px; vertical-align: middle; font-size: 0; opacity: 1; color: var(--text); background: currentColor;
   -webkit-mask: var(--bv-down) 0 0 / 7px 4px no-repeat; mask: var(--bv-down) 0 0 / 7px 4px no-repeat;
 }
@@ -387,10 +387,6 @@ input[type="number"], input[type="text"] { border: 1px solid var(--edge); border
 :root[data-frame="bevel"] dialog.venues > :not(h3) { margin-left: 8px; margin-right: 8px; }
 :root[data-frame="bevel"] dialog.venues .row button { min-width: 75px; height: 23px; }
 :where([data-frame="bevel"]) :is(dialog.venues, dialog.guide)::backdrop { background: transparent; }
-:root[data-frame="bevel"] dialog.coins input[type="search"] { width: calc(100% - 16px); margin-top: 0; }
-:where([data-frame="bevel"]) .coin-row:hover, :where([data-frame="bevel"]) .coin-row:focus-visible, :where([data-frame="bevel"]) .coin-row.on { background: var(--bar); color: var(--bar-text); outline: 0; }
-:where([data-frame="bevel"]) :is(.coin-row:hover, .coin-row:focus-visible, .coin-row.on) .muted { color: var(--bar-text); }
-:where([data-frame="bevel"]) .coin-list { background: var(--well); border: 1px solid; border-color: var(--bv-c-sunken); border-image: var(--bv-sunken) 2 / 2px; }
 :where([data-frame="bevel"]) .venue-list { background: transparent; }
 
 /* ---- over the map and in a pane ---------------------------------------------------------------------------------------------------------- */

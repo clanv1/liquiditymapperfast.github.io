@@ -68,6 +68,8 @@ export abstract class BookConnector {
   /** Receives every liquidation the venue reports on this socket (the venues that publish them: shared/liquidations.ts). */
   onLiquidation: (event: LiquidationEvent) => void = () => {};
   #socket: WebSocket | null = null;
+  /** Gzipped frames decode in parallel but apply in arrival order: a slow one must not land after a newer book. Empty until the first promise. */
+  #decoded: Promise<void> | null = null;
   #ping: ReturnType<typeof setInterval> | null = null;
   #pending: unknown = null;
   #flush: ReturnType<typeof setTimeout> | null = null;
@@ -96,8 +98,11 @@ export abstract class BookConnector {
   protected abstract open(send: (payload: unknown) => void): void;
   /** Handle one decoded frame (text) and update the local book. May call `fail` to force a reconnect. */
   abstract onMessage(text: string): void;
-  /** Frames arrive as text unless a venue compresses them. */
-  decode(data: unknown): string | null {
+  /**
+   * Frames arrive as text unless a venue compresses them. A promise is the gzipped ones: they are applied in the order they arrived,
+   * and a frame whose connection has already been replaced is dropped.
+   */
+  decode(data: unknown): string | null | Promise<string | null> {
     if (typeof data === 'string') return data;
     if (data instanceof ArrayBuffer) return new TextDecoder().decode(data);
     return null;
@@ -115,6 +120,15 @@ export abstract class BookConnector {
   protected coalesceMs(): number { return 0; }
   /** Application-level keepalive for venues that close idle sockets (WebSocket ping frames are answered by the runtime). */
   keepalive(): { everyMs: number; frame: () => unknown } | null { return null; }
+  /**
+   * Work a connection needs before its socket exists. Returning a promise waits for it and opens the socket only while this connection is
+   * still the one being opened; returning nothing connects at once (a promise here would open the socket a turn later, and a test that
+   * reads the socket from `start` would miss it). A failure here reconnects, and work that finishes after the connection was dropped is not used.
+   */
+  protected prepare(): void | Promise<void> {}
+  /** Send one frame on the open socket (a string as it is, anything else as JSON). No socket yet: the frame is dropped. */
+  #send: ((payload: unknown) => void) | null = null;
+  protected send(payload: unknown): void { try { this.#send?.(payload); } catch { /* the socket is closing; onclose reconnects */ } }
 
   /** USD value of `size` resting at `price`: base-coin sizes by default; venues that size in contracts or in USD override. */
   protected usdOf(price: number, size: number): number { return price * size; }
@@ -162,7 +176,7 @@ export abstract class BookConnector {
     else if (this.state === 'connecting' && this.#socket !== null && now - this.#connectAt > this.startupMs()) this.fail(`no data ${Math.round(this.startupMs() / 1000)} s after connecting`);
   }
   stop(): void {
-    this.state = 'stopped'; this.#generation++; this.reset(); this.#stopPing(); this.#dropPending();
+    this.state = 'stopped'; this.#generation++; this.#send = null; this.#decoded = null; this.reset(); this.#stopPing(); this.#dropPending();
     if (this.#retry) clearTimeout(this.#retry); this.#retry = null;
     if (this.#watchdog) clearInterval(this.#watchdog); this.#watchdog = null;
     this.#far?.stop();
@@ -170,7 +184,7 @@ export abstract class BookConnector {
   }
   /** Drop the book and reconnect (sequence gap, bad frame, silence). */
   fail(reason: string): void {
-    this.failures++; this.#generation++;
+    this.failures++; this.#generation++; this.#send = null; this.#decoded = null;
     this.lastError = reason; this.lastFailure = reason; this.reset(); this.#stopPing(); this.#dropPending();
     const socket = this.#socket; this.#socket = null; try { socket?.close(); } catch { /* already closed */ }
     this.#scheduleReconnect();
@@ -183,12 +197,27 @@ export abstract class BookConnector {
   protected record = record;
 
   #connect(): void {
-    this.state = 'connecting'; this.#connectAt = Date.now(); this.#generation++;
+    this.state = 'connecting'; this.#connectAt = Date.now(); const generation = ++this.#generation;
+    let pending: void | Promise<void>;
+    try { pending = this.prepare(); }
+    catch (error) { if (generation === this.#generation) this.fail(error instanceof Error ? error.message : String(error)); return; }
+    if (pending instanceof Promise) {
+      void pending.then(
+        () => { if (generation === this.#generation && this.state !== 'stopped') this.#open(generation); },
+        error => { if (generation === this.#generation && this.state !== 'stopped') this.fail(error instanceof Error ? error.message : String(error)); },
+      );
+      return;
+    }
+    this.#open(generation);
+  }
+  #open(generation: number): void {
+    if (generation !== this.#generation || this.state === 'stopped') return;
     try {
       const socket = new WebSocket(this.url()); socket.binaryType = 'arraybuffer'; this.#socket = socket;
       socket.onopen = () => {
         if (this.#socket !== socket) return; // the connection was stopped or replaced while it was opening: it must not subscribe now
         const send = (payload: unknown) => socket.send(typeof payload === 'string' ? payload : JSON.stringify(payload)); // a string is sent as it is (Bitget's "ping")
+        this.#send = send;
         this.open(send);
         const ka = this.keepalive();
         if (ka) { this.#stopPing(); this.#ping = setInterval(() => { try { send(ka.frame()); } catch { /* socket closing; onclose handles it */ } }, ka.everyMs); this.#ping.unref?.(); }
@@ -196,7 +225,7 @@ export abstract class BookConnector {
       socket.onmessage = event => { if (this.#socket === socket) this.receive(event.data); };
       socket.onerror = () => { if (this.#socket === socket) this.fail('socket error'); };
       socket.onclose = () => { if (this.#socket === socket) this.fail('socket closed'); };
-    } catch (error) { this.fail(error instanceof Error ? error.message : String(error)); }
+    } catch (error) { if (generation === this.#generation) this.fail(error instanceof Error ? error.message : String(error)); }
   }
   /** Entry point for a raw frame: decode and apply it now, or keep only the newest one for the next flush. */
   receive(data: unknown): void {
@@ -206,8 +235,24 @@ export abstract class BookConnector {
     if (!this.#flush) this.#flush = setTimeout(() => { this.#flush = null; const latest = this.#pending; this.#pending = null; if (latest !== null && this.state !== 'stopped') this.#process(latest); }, wait);
   }
   #process(data: unknown): void {
-    try { const text = this.decode(data); if (text !== null) this.onMessage(text); }
-    catch (error) { this.fail(`bad frame: ${error instanceof Error ? error.message : String(error)}`.slice(0, 160)); }
+    const generation = this.#generation;
+    const apply = (text: string | null): void => {
+      if (text === null || generation !== this.#generation || this.state === 'stopped') return;
+      try { this.onMessage(text); }
+      catch (error) { if (generation === this.#generation) this.fail(`bad frame: ${error instanceof Error ? error.message : String(error)}`.slice(0, 160)); }
+    };
+    const decode = (): Promise<void> | void => {
+      if (generation !== this.#generation || this.state === 'stopped') return;
+      try {
+        const text = this.decode(data);
+        if (text instanceof Promise) return text.then(apply, error => { if (generation === this.#generation && this.state !== 'stopped') this.fail(`bad frame: ${error instanceof Error ? error.message : String(error)}`.slice(0, 160)); });
+        apply(text);
+      } catch (error) { if (generation === this.#generation) this.fail(`bad frame: ${error instanceof Error ? error.message : String(error)}`.slice(0, 160)); }
+    };
+    // A text frame is applied at once, as it always was. A gzipped one waits its turn, so two snapshots cannot pass each other.
+    if (this.#decoded) { this.#decoded = this.#decoded.then(decode, decode); return; }
+    const pending = decode();
+    if (pending instanceof Promise) this.#decoded = pending.then(() => {}, () => {});
   }
   #dropPending(): void { if (this.#flush) clearTimeout(this.#flush); this.#flush = null; this.#pending = null; }
   #stopPing(): void { if (this.#ping) clearInterval(this.#ping); this.#ping = null; }
