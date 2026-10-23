@@ -453,8 +453,8 @@ export class HyperliquidConnector extends MarketBook {
 }
 
 /**
- * Hyperliquid spot: the same socket as the perpetual, for one pair of the spot catalogue. The book is the twenty levels the
- * exchange sends at the real prices (the perpetual instead asks for bands). BTC's pair is UBTC/USDC, which the exchange names `@142`.
+ * Hyperliquid spot, BTC only: UBTC/USDC, which the exchange names `@142`. The same socket as the perpetual. The book is the twenty
+ * levels the exchange sends at the real prices (the perpetual instead asks for bands). No other coin is listed here.
  */
 export class HyperliquidSpotConnector extends MarketBook {
   readonly id = 'hyperliquidspot'; readonly name = 'Hyperliquid spot'; readonly quote = 'USDC'; readonly marketType = 'spot' as const;
@@ -578,7 +578,7 @@ const VENUE_SPECS: readonly (Omit<BrowserVenue, 'listed' | 'make'> & { id: Marke
   { id: 'mexc', name: 'MEXC', kind: 'perp', recommended: false, probe: null, make: m => ({ book: new MexcConnector(m), feeds: [] }) },
 ];
 
-/** The markets for one coin: every one of the twelve, each either listing it (and able to start) or not. */
+/** The markets for one coin: each one either listing it (and able to start) or not. Hyperliquid spot lists BTC only. */
 export function browserVenues(coin: Coin = BTC): BrowserVenue[] {
   return VENUE_SPECS.map(({ make, ...spec }) => {
     const listing = coin.markets[spec.id];
