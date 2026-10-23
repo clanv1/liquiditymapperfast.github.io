@@ -68,6 +68,8 @@ export abstract class BookConnector {
   /** Receives every liquidation the venue reports on this socket (the venues that publish them: shared/liquidations.ts). */
   onLiquidation: (event: LiquidationEvent) => void = () => {};
   #socket: WebSocket | null = null;
+  /** Gzipped frames decode in parallel but apply in arrival order: a slow one must not land after a newer book. Empty until the first promise. */
+  #decoded: Promise<void> | null = null;
   #ping: ReturnType<typeof setInterval> | null = null;
   #pending: unknown = null;
   #flush: ReturnType<typeof setTimeout> | null = null;
@@ -97,8 +99,8 @@ export abstract class BookConnector {
   /** Handle one decoded frame (text) and update the local book. May call `fail` to force a reconnect. */
   abstract onMessage(text: string): void;
   /**
-   * Frames arrive as text unless a venue compresses them. A promise is the gzipped ones: the socket stays on this connection
-   * (`#process` drops it if the connection has already been replaced).
+   * Frames arrive as text unless a venue compresses them. A promise is the gzipped ones: they are applied in the order they arrived,
+   * and a frame whose connection has already been replaced is dropped.
    */
   decode(data: unknown): string | null | Promise<string | null> {
     if (typeof data === 'string') return data;
@@ -174,7 +176,7 @@ export abstract class BookConnector {
     else if (this.state === 'connecting' && this.#socket !== null && now - this.#connectAt > this.startupMs()) this.fail(`no data ${Math.round(this.startupMs() / 1000)} s after connecting`);
   }
   stop(): void {
-    this.state = 'stopped'; this.#generation++; this.#send = null; this.reset(); this.#stopPing(); this.#dropPending();
+    this.state = 'stopped'; this.#generation++; this.#send = null; this.#decoded = null; this.reset(); this.#stopPing(); this.#dropPending();
     if (this.#retry) clearTimeout(this.#retry); this.#retry = null;
     if (this.#watchdog) clearInterval(this.#watchdog); this.#watchdog = null;
     this.#far?.stop();
@@ -182,7 +184,7 @@ export abstract class BookConnector {
   }
   /** Drop the book and reconnect (sequence gap, bad frame, silence). */
   fail(reason: string): void {
-    this.failures++; this.#generation++; this.#send = null;
+    this.failures++; this.#generation++; this.#send = null; this.#decoded = null;
     this.lastError = reason; this.lastFailure = reason; this.reset(); this.#stopPing(); this.#dropPending();
     const socket = this.#socket; this.#socket = null; try { socket?.close(); } catch { /* already closed */ }
     this.#scheduleReconnect();
@@ -239,11 +241,18 @@ export abstract class BookConnector {
       try { this.onMessage(text); }
       catch (error) { if (generation === this.#generation) this.fail(`bad frame: ${error instanceof Error ? error.message : String(error)}`.slice(0, 160)); }
     };
-    try {
-      const text = this.decode(data);
-      if (text instanceof Promise) { void text.then(apply, error => { if (generation === this.#generation && this.state !== 'stopped') this.fail(`bad frame: ${error instanceof Error ? error.message : String(error)}`.slice(0, 160)); }); return; }
-      apply(text);
-    } catch (error) { this.fail(`bad frame: ${error instanceof Error ? error.message : String(error)}`.slice(0, 160)); }
+    const decode = (): Promise<void> | void => {
+      if (generation !== this.#generation || this.state === 'stopped') return;
+      try {
+        const text = this.decode(data);
+        if (text instanceof Promise) return text.then(apply, error => { if (generation === this.#generation && this.state !== 'stopped') this.fail(`bad frame: ${error instanceof Error ? error.message : String(error)}`.slice(0, 160)); });
+        apply(text);
+      } catch (error) { if (generation === this.#generation) this.fail(`bad frame: ${error instanceof Error ? error.message : String(error)}`.slice(0, 160)); }
+    };
+    // A text frame is applied at once, as it always was. A gzipped one waits its turn, so two snapshots cannot pass each other.
+    if (this.#decoded) { this.#decoded = this.#decoded.then(decode, decode); return; }
+    const pending = decode();
+    if (pending instanceof Promise) this.#decoded = pending.then(() => {}, () => {});
   }
   #dropPending(): void { if (this.#flush) clearTimeout(this.#flush); this.#flush = null; this.#pending = null; }
   #stopPing(): void { if (this.#ping) clearInterval(this.#ping); this.#ping = null; }

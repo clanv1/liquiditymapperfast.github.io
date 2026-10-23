@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { BROWSER_VENUES } from '../src/shared/venues.ts';
 import { familyKey } from '../src/app/cvd/families.ts';
 import { markOf } from '../src/app/venue-marks.ts';
-import type { BookConnector, TradeEvent } from '../src/shared/connector.ts';
+import { BookConnector, type TradeEvent } from '../src/shared/connector.ts';
 import { FlowSources } from '../src/server/v2/flow-sources.mts';
 import { CONNECTOR_FACTORIES } from '../src/server/v2/connectors.mts';
 import { RECOMMENDED_EXTRA_VENUES } from '../src/server/v2/venues.mts';
@@ -228,4 +228,35 @@ test('the nine exchanges are recommended in the browser and on the server, and t
     sources.sync(new Set(ids.map(id => BROWSER_VENUES.find(v => v.id === id)!.make().book.instrumentId)));
     assert.deepEqual(sources.active, []);
   } finally { sources.close(); }
+});
+
+test('a slow gzipped frame cannot land after a newer one, and a frame already in flight is dropped once the connection ends', async () => {
+  class Held extends BookConnector {
+    readonly id = 'held'; readonly name = 'Held'; readonly symbol = 'BTC'; readonly quote = 'USD'; readonly marketType = 'perpetual' as const;
+    seen: string[] = [];
+    protected url() { return 'wss://example.invalid/held'; }
+    protected open() { /* the test never opens a socket */ }
+    override decode(data: unknown): string | Promise<string> {
+      const text = String(data);
+      if (text === 'sync') return text;
+      return new Promise(resolve => setTimeout(() => resolve(text), text === 'slow' ? 30 : 0));
+    }
+    onMessage(text: string) { this.seen.push(text); }
+  }
+  const c = new Held();
+  c.state = 'live';
+  c.receive('sync');
+  assert.deepEqual(c.seen, ['sync'], 'a text frame is still applied before receive returns');
+  c.receive('slow');
+  c.receive('fast');
+  assert.deepEqual(c.seen, ['sync'], 'the frame that decompresses first waits for the one that arrived before it');
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.deepEqual(c.seen, ['sync', 'slow', 'fast']);
+
+  const dropped = new Held();
+  dropped.state = 'live';
+  dropped.receive('slow');
+  dropped.stop();
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.deepEqual(dropped.seen, [], 'gunzip finishing after the socket was closed does not change the book');
 });
