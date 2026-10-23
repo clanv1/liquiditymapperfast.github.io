@@ -123,6 +123,12 @@ const SPECS: Readonly<Record<string, CandleSpec>> = {
     page: async (i, ms, end, get, symbol, limit = 1000) => list(await get('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type: 'candleSnapshot', req: { coin: symbol, interval: i, startTime: end - (limit - 1) * ms, endTime: end } }) }))
       .map(r => row(at(r, 't'), at(r, 'o'), at(r, 'h'), at(r, 'l'), at(r, 'c'), at(r, 'v'))),
   },
+  // The spot pair's own name (`@142` for BTC) is the coin the candle snapshot asks for.
+  hyperliquidspot: {
+    intervals: { 60_000: '1m', 300_000: '5m', 900_000: '15m', 1_800_000: '30m', 3_600_000: '1h', 14_400_000: '4h', 86_400_000: '1d' }, limit: 1000,
+    page: async (i, ms, end, get, symbol, limit = 1000) => list(await get('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type: 'candleSnapshot', req: { coin: symbol, interval: i, startTime: end - (limit - 1) * ms, endTime: end } }) }))
+      .map(r => row(at(r, 't'), at(r, 'o'), at(r, 'h'), at(r, 'l'), at(r, 'c'), at(r, 'v'))),
+  },
 };
 
 /** The venue id of an instrument id ("binance:BTCUSDT" is "binance"). */

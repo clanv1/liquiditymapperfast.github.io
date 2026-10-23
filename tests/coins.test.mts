@@ -38,17 +38,26 @@ test('each market\'s list is read into coin, listing, price of one coin and volu
   assert.deepEqual(okx, [{ coin: 'DOGE', listing: { symbol: 'DOGE-USDT-SWAP', contract: 1000, unit: 1 }, price: 0.1, volumeUsd: 100 }], 'a swap is kept only with a contract size in its own coin');
   assert.deepEqual(read('hyperliquid', [{ universe: [{ name: 'kPEPE' }, { name: 'GONE', isDelisted: true }] }, [{ markPx: '0.004', dayNtlVlm: '9' }, { markPx: '1', dayNtlVlm: '1' }]]),
     [{ coin: 'PEPE', listing: { symbol: 'kPEPE', unit: 1000 }, price: 0.004 / 1000, volumeUsd: 9 }]);
+  const spot = [{ tokens: [{ name: 'USDC', index: 0 }, { name: 'UBTC', index: 197 }, { name: 'HYPE', index: 150 }, { name: 'PURR', index: 1 }],
+    universe: [{ name: '@142', index: 142, tokens: [197, 0] }, { name: '@107', index: 107, tokens: [150, 0] }, { name: 'PURR/USDC', index: 0, tokens: [1, 0] }, { name: '@234', index: 234, tokens: [197, 8] }] }];
+  const ctx = (coin: string, mark: string, vol: string) => ({ coin, markPx: mark, dayNtlVlm: vol });
+  const contexts: unknown[] = []; contexts[0] = ctx('PURR/USDC', '0.1', '5'); contexts[107] = ctx('@107', '40', '8'); contexts[142] = ctx('@142', '80000', '1000'); contexts[234] = ctx('@234', '80000', '1');
+  assert.deepEqual(read('hyperliquidspot', [spot[0], contexts]), [
+    { coin: 'BTC', listing: { symbol: '@142', unit: 1 }, price: 80000, volumeUsd: 1000 },
+    { coin: 'HYPE', listing: { symbol: '@107', unit: 1 }, price: 40, volumeUsd: 8 },
+    { coin: 'PURR', listing: { symbol: 'PURR/USDC', unit: 1 }, price: 0.1, volumeUsd: 5 },
+  ], 'UBTC is BTC, a pair not quoted in USDC is left out, and a context is read at the pair index');
   const deribit = read('deribit', { result: [{ instrument_name: 'ETH-PERPETUAL', base_currency: 'ETH', mark_price: 2500, volume_usd: 7 }, { instrument_name: 'ETH-27MAR26', base_currency: 'ETH', mark_price: 2500 }] },
     { result: [{ instrument_name: '1000PEPE_USDC-PERPETUAL', base_currency: '1000PEPE', mark_price: 0.004, volume_usd: 3 }] });
   assert.deepEqual(deribit, [{ coin: 'ETH', listing: { symbol: 'ETH-PERPETUAL', inverse: true, unit: 1 }, price: 2500, volumeUsd: 7 }, { coin: 'PEPE', listing: { symbol: '1000PEPE_USDC-PERPETUAL', unit: 1000 }, price: 0.004 / 1000, volumeUsd: 3 }], 'dated futures are left out');
   assert.deepEqual(read('coinbase', { 'SOL-USD': { stats_24hour: { last: '100', volume: '2' } }, 'SOL-EUR': { stats_24hour: { last: '90', volume: '2' } } }), [{ coin: 'SOL', listing: { symbol: 'SOL-USD', unit: 1 }, price: 100, volumeUsd: 200 }]);
 });
 
-test('a coin on nine of the eleven markets is listed, on eight it is not; one already listed stays on eight', () => {
-  const nine = buildCatalogue(lists({ AAA: { price: 2, off: ['deribit', 'coinbase'] }, BBB: { price: 3, off: ['deribit', 'coinbase', 'hyperliquid'] } }), null, NOW).catalogue;
+test('a coin on nine of the twelve markets is listed, on eight it is not; one already listed stays on eight', () => {
+  const nine = buildCatalogue(lists({ AAA: { price: 2, off: ['deribit', 'coinbase', 'hyperliquidspot'] }, BBB: { price: 3, off: ['deribit', 'coinbase', 'hyperliquid', 'hyperliquidspot'] } }), null, NOW).catalogue;
   assert.equal(MIN_MARKETS, 9); assert.equal(KEEP_MARKETS, 8);
   assert.ok(coinOf(nine, 'AAA')); assert.equal(coinOf(nine, 'BBB'), undefined);
-  const later = buildCatalogue(lists({ AAA: { price: 2, off: ['deribit', 'coinbase', 'okxspot'] } }), nine, NOW + 86_400_000).catalogue;
+  const later = buildCatalogue(lists({ AAA: { price: 2, off: ['deribit', 'coinbase', 'hyperliquidspot', 'okxspot'] } }), nine, NOW + 86_400_000).catalogue;
   assert.ok(coinOf(later, 'AAA'), 'kept at eight');
   assert.equal(Object.keys(coinOf(later, 'AAA')!.markets).length, 8);
 });
@@ -57,7 +66,7 @@ test('a market whose price is another token\'s is left out of the coin, and the 
   const c = buildCatalogue(lists({ LIT: { price: 1, at: { binancespot: 0.21 } } }), null, NOW).catalogue;
   const lit = coinOf(c, 'LIT')!;
   assert.equal(lit.markets.binancespot, undefined);
-  assert.equal(Object.keys(lit.markets).length, 10);
+  assert.equal(Object.keys(lit.markets).length, 11);
 });
 
 test('a market whose list fails keeps its listings from the previous list, and says how old they are', () => {
@@ -74,7 +83,8 @@ test('a market whose list fails keeps its listings from the previous list, and s
 test('with too few lists, or a list that loses a third of its coins, the previous list stands', () => {
   const first = buildCatalogue(lists({ AAA: { price: 2 }, BBB: { price: 3 }, CCC: { price: 4 } }), null, NOW).catalogue;
   const few = lists({ AAA: { price: 2 } }) as Partial<Record<CoinVenue, ListRow[] | null>>;
-  for (const v of COIN_VENUES.slice(0, 6)) few[v] = null;
+  // Six lists are the fewest a day's catalogue will accept, so one more than that has to fail.
+  for (const v of COIN_VENUES.slice(0, 7)) few[v] = null;
   assert.equal(buildCatalogue(few, first, NOW + 1).catalogue, first);
   const none = buildCatalogue(few, null, NOW + 1);
   assert.equal(none.fresh, false, 'with nothing before it, too few lists is still no day\'s list');
@@ -120,10 +130,12 @@ test('a list read from JSON drops what it cannot use and keeps the rest', () => 
 
 test('every market is asked once and a failing one is null', async () => {
   const asked: string[] = [];
-  const got = await fetchLists(async url => { asked.push(url); if (url.includes('bybit')) throw new Error('403'); return url.includes('okx') ? { data: [] } : []; }, NOW);
+  const got = await fetchLists(async (url, init) => { asked.push(url + (init?.body ?? '')); if (url.includes('bybit')) throw new Error('403'); return url.includes('okx') ? { data: [] } : []; }, NOW);
   assert.equal(got.bybit, null); assert.equal(got.bybitspot, null);
   assert.equal(got.okx, null, 'a list that yields nothing is a failed one');
-  assert.equal(new Set(asked).size, asked.length);
+  assert.equal(got.hyperliquid, null); assert.equal(got.hyperliquidspot, null);
+  assert.equal(new Set(asked).size, asked.length, 'two Hyperliquid lists share the info address and differ by the body');
+  assert.equal(asked.filter(item => item.startsWith('https://api.hyperliquid.xyz/info')).length, 2);
 });
 
 test('the shipped coin list is a list, BTC first, every coin on nine markets or more, and named the way the connectors name it', () => {
@@ -141,7 +153,19 @@ test('the server builds its own list, serves it, and keeps the last one when a b
   fs.writeFileSync(shipped, JSON.stringify(buildCatalogue(lists({}), null, NOW - 86_400_000).catalogue));
   let fail = false;
   const answers: Record<string, unknown> = {};
-  const get = async (url: string) => { if (fail) throw new Error('offline'); return answers[url] ?? []; };
+  const get = async (url: string, init?: { body?: string }) => {
+    if (fail) throw new Error('offline');
+    if (url === 'https://api.hyperliquid.xyz/info') {
+      const type = init?.body ? (JSON.parse(init.body) as { type?: string }).type : '';
+      if (type === 'spotMetaAndAssetCtxs') {
+        const contexts: unknown[] = [];
+        contexts[142] = { coin: '@142', markPx: '80000', dayNtlVlm: '1' };
+        return [{ tokens: [{ name: 'USDC', index: 0 }, { name: 'UBTC', index: 197 }], universe: [{ name: '@142', index: 142, tokens: [197, 0] }] }, contexts];
+      }
+      return reply.hyperliquid ?? [];
+    }
+    return answers[url] ?? [];
+  };
   const list = new CoinList(file, shipped, get, () => NOW);
   const sent: { status?: number; body?: string } = {};
   const res = { writeHead: (status: number) => { sent.status = status; }, end: (body: string) => { sent.body = body; } } as unknown as import('node:http').ServerResponse;

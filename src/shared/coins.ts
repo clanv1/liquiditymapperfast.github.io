@@ -1,5 +1,5 @@
 /**
- * The coins the page offers: BTC, and every coin listed on at least nine of the eleven markets the browser reads, with each market's own
+ * The coins the page offers: BTC, and every coin listed on at least nine of the twelve markets the browser reads, with each market's own
  * name for it. The list is built once a day from the markets' public lists (`scripts/coins.mts`: GitHub Actions for the site, the server for
  * itself) and the page reads it at start. Building it is pure: the lists come in as parsed JSON, so a test can say what each market answered.
  *
@@ -11,8 +11,8 @@
 /** The markets there were before a saved venue choice recorded which ones it had seen (shared/venues.ts restoreSelection). */
 export const EARLIER_BROWSER_VENUES: readonly string[] = ['binance', 'bybit', 'okx', 'bitget', 'hyperliquid', 'deribit', 'binancespot', 'coinbase'];
 
-/** The eleven markets, as the venue ids the browser uses. A coin is listed by how many of these list it. */
-export const COIN_VENUES = ['binance', 'binancespot', 'bybit', 'bybitspot', 'okx', 'okxspot', 'bitget', 'bitgetspot', 'hyperliquid', 'deribit', 'coinbase'] as const;
+/** The twelve markets, as the venue ids the browser uses. A coin is listed by how many of these list it. */
+export const COIN_VENUES = ['binance', 'binancespot', 'bybit', 'bybitspot', 'okx', 'okxspot', 'bitget', 'bitgetspot', 'hyperliquid', 'hyperliquidspot', 'deribit', 'coinbase'] as const;
 export type CoinVenue = (typeof COIN_VENUES)[number];
 /** Markets a person can add that do not count towards a coin's place in the list (MEXC: its books and history are not readable by a page). */
 export const OPTIONAL_VENUES = ['mexc'] as const;
@@ -31,7 +31,7 @@ export interface Listing {
 }
 export interface Coin {
   coin: string;
-  /** How each market lists it: the eleven of COIN_VENUES, and an optional market where one is known (BTC's are built in). */
+  /** How each market lists it: the twelve of COIN_VENUES, and an optional market where one is known (BTC's are built in). */
   markets: Partial<Record<MarketVenue, Listing>>;
   /** 24 h volume in USD over the markets that list it, and the price of one coin when the list was built. */
   volumeUsd: number; price: number;
@@ -53,7 +53,10 @@ export const BTC: Coin = {
     bybit: { symbol: 'BTCUSDT', unit: 1 }, bybitspot: { symbol: 'BTCUSDT', unit: 1 },
     okx: { symbol: 'BTC-USDT-SWAP', unit: 1, contract: 0.01 }, okxspot: { symbol: 'BTC-USDT', unit: 1 },
     bitget: { symbol: 'BTCUSDT', unit: 1 }, bitgetspot: { symbol: 'BTCUSDT', unit: 1 },
-    hyperliquid: { symbol: 'BTC', unit: 1 }, deribit: { symbol: 'BTC-PERPETUAL', unit: 1, inverse: true }, coinbase: { symbol: 'BTC-USD', unit: 1 },
+    hyperliquid: { symbol: 'BTC', unit: 1 },
+    // UBTC/USDC, the spot pair Hyperliquid names `@142` (the book and the trades subscribe with that name).
+    hyperliquidspot: { symbol: '@142', unit: 1 },
+    deribit: { symbol: 'BTC-PERPETUAL', unit: 1, inverse: true }, coinbase: { symbol: 'BTC-USD', unit: 1 },
     // Contracts of 0.0001 BTC (MEXC's contract detail; a page cannot read it, so it is written here).
     mexc: { symbol: 'BTC_USDT', unit: 1, contract: 0.0001 },
   },
@@ -121,6 +124,8 @@ function rowOf(venue: CoinVenue, raw: string | null, listing: Omit<Listing, 'uni
   return { coin, listing: { ...listing, unit }, price: listedPrice / unit, volumeUsd: Number.isFinite(volumeUsd) && volumeUsd > 0 ? volumeUsd : 0 };
 }
 const POST_JSON = { method: 'POST', headers: { 'content-type': 'application/json' } };
+/** Hyperliquid spot tokens that are one coin of the asset the page already names (Unit Bitcoin is BTC). */
+const HYPERLIQUID_UNIT_COIN: Readonly<Record<string, string>> = { UBTC: 'BTC', UETH: 'ETH', USOL: 'SOL' };
 
 /** Each market's list: the requests (every one answers a page, with CORS) and how to read their answers. */
 export const MARKET_LISTS: Readonly<Record<CoinVenue, { urls: { url: string; init?: { method: string; headers: Record<string, string>; body: string } }[]; read(answers: unknown[], now: number): ListRow[] }>> = {
@@ -175,6 +180,28 @@ export const MARKET_LISTS: Readonly<Record<CoinVenue, { urls: { url: string; ini
     read: ([body]) => {
       const universe = list(at(body, 0, 'universe')), contexts = list(at(body, 1));
       return universe.map((u, i) => at(u, 'isDelisted') === true ? null : rowOf('hyperliquid', text(at(u, 'name')), { symbol: text(at(u, 'name')) }, num(at(contexts, i, 'markPx')), num(at(contexts, i, 'dayNtlVlm')))).filter(r => r !== null);
+    },
+  },
+  hyperliquidspot: {
+    // Spot is a second catalogue (`spotMetaAndAssetCtxs`): pairs quote USDC, and a context sits at the pair's own index, not beside it in the array.
+    // UBTC, UETH and USOL are Unit wrappers of one coin; the other tokens keep the name they trade under.
+    urls: [{ url: 'https://api.hyperliquid.xyz/info', init: { ...POST_JSON, body: JSON.stringify({ type: 'spotMetaAndAssetCtxs' }) } }],
+    read: ([body]) => {
+      const tokens = new Map<number, { name: string; coin: string }>();
+      for (const token of list(at(body, 0, 'tokens'))) {
+        const name = text(at(token, 'name'));
+        tokens.set(num(at(token, 'index')), { name, coin: HYPERLIQUID_UNIT_COIN[name] ?? name });
+      }
+      const usdc = [...tokens].find(([, token]) => token.name === 'USDC')?.[0];
+      if (usdc === undefined) return [];
+      const contexts = list(at(body, 1));
+      return list(at(body, 0, 'universe')).map(pair => {
+        const indexes = list(at(pair, 'tokens')), base = tokens.get(num(at(indexes, 0)));
+        if (!base || num(at(indexes, 1)) !== usdc) return null;
+        const name = text(at(pair, 'name')), ctx = at(contexts, num(at(pair, 'index')));
+        if (text(at(ctx, 'coin')) !== name) return null;
+        return rowOf('hyperliquidspot', base.coin, { symbol: name }, num(at(ctx, 'markPx')), num(at(ctx, 'dayNtlVlm')));
+      }).filter(r => r !== null);
     },
   },
   deribit: {
